@@ -26,15 +26,7 @@
 
 #include <linux/fb.h>
 #include <linux/init.h>
-
 #include <asm/io.h>
-
-    /*
-     *  RAM we reserve for the frame buffer. This defines the maximum screen
-     *  size
-     *
-     *  The default can be overridden if the driver is compiled as a module
-     */
 
 #define VIDEOMEMSIZE	(2*480*640)	/* 600 KB */
 #define VIDEOMEMSTART 0x20020000
@@ -206,7 +198,7 @@ static int n311fb_check_var(struct fb_var_screeninfo *var,
 			memlen = pitch * var->yres;
 
 			if (var->xres_virtual < var->xres) {
-				printk("nvidiafb: required video memory, "
+				printk("n311fb: required video memory, "
 				       "%d bytes, for %dx%d-%d (virtual) "
 				       "is out of range\n",
 				       memlen, var->xres_virtual,
@@ -215,13 +207,6 @@ static int n311fb_check_var(struct fb_var_screeninfo *var,
 			}
 		}
 	}
-
-	/*if (var->accel_flags) {
-		if (var->yres_virtual > 0x7fff)
-			var->yres_virtual = 0x7fff;
-		if (var->xres_virtual > 0x7fff)
-			var->xres_virtual = 0x7fff;
-	}*/
 
 	var->xres_virtual &= ~63;
 
@@ -360,6 +345,8 @@ static int n311fb_pan_display(struct fb_var_screeninfo *var,
 	
 
 	total = var->yoffset * info->fix.line_length + var->xoffset;
+
+	// Needs to be rewritten
         info->fix.smem_start=VIDEOMEMSTART-total;
 
 
