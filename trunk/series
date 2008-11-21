@@ -1,0 +1,48 @@
+#Patches for G500 used on n311
+
+# not linked to G500
+#unionfs-2.2.3_for_2.6.24.diff
+
+# hack - used to peek and poke various physical memory areas
+#g500-mem_access.patch
+
+s3c2440-machine-g500.patch
+s3c2410_udc-2440_dual_packet-workaround.patch
+s3c2410-usb-switch.patch
+s3c2410_touchscreen.patch
+s3c2410_touchscreen-g500.patch
+
+# disable early putc int uncompressor ase the first UART may not be initialized
+disable-uncompressor-putc-hack.patch
+
+# recent mci driver version from openmoko repository, but does not work with s3c2440/2.6.24
+#s3c_mci.patch
+#s3c_mci-g500.patch
+
+# from old 2410 version, with polling write operation
+s3c2440_sdi.patch
+s3c2440_sdi-g500.patch
+
+gpio-keys-g500.patch
+leds-g500.patch
+s3c2410_bl.patch
+s3c2410_bl-g500.patch
+
+s3c2443-s3c2440-ac97.patch
+wm9713-codec.patch
+sound-g500-wm9713.patch
+
+# disable init hack, currently not working, and the codec is correctly initialized by wince
+s3c2443-ac97-disable-init-hack.patch
+
+# increasing maximum UART baud rate is needed for bluetooth (1500000)
+s3c2410_serial-max-speed.patch
+
+# same driver init, but main loop different
+s3c2410_touchscreen-g500-fix.patch
+
+# suspend/resume hack based on h1940
+pm.patch
+
+# sample config with all specific drivers enabled
+config-g500.patch
