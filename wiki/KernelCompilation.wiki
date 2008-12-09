@@ -1,0 +1,5 @@
+#summary Neccessary tricks you should know to compile bootable kernel
+
+= Patches =
+
+Always apply the *disable-uncompressor-putc-hack.patch* from G500. Kernel will not boot without it.
