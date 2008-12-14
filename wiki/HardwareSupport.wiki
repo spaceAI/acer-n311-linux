@@ -1,13 +1,15 @@
-#summary One-sentence summary of this page.
-
-= Introduction =
-
-Add your content here.
+#summary Current Status of Hardware Support
 
 
-= Details =
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+|| *Component* || *Status*||
+|| USB || Works ||
+|| SD/MMC || Works ||
+|| Video || Works/not tested with X yet||
+|| Touchscreen || Work in progress ||
+|| Buttons || Work in progress ||
+|| Battery || Not supported ||
+|| Nand Flash|| Not supported ||
+|| Serial Port || Not tested ||
+|| Bluetooth || Not tested||
+|| Wi-Fi || Not tested ||
+||Sound|| Not tested ||
