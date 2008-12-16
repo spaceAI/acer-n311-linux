@@ -3,4 +3,4 @@
 
 == Frame buffer console ==
 
-<img src=http://dl.getdropbox.com/u/195977/vga_console.jpg>
+<img src="http://dl.getdropbox.com/u/195977/vga_console.jpg" />
