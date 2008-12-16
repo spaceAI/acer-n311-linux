@@ -3,4 +3,4 @@
 
 == Frame buffer console ==
 
-<img src="http://code.google.com/p/acer-n311-linux/source/browse/trunk/vga_console.jpg" />
+<img src=http://code.google.com/p/acer-n311-linux/source/browse/trunk/vga_console.jpg />
