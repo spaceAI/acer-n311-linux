@@ -1,0 +1,4 @@
+#summary Photos of Linux running on n311
+#labels n311,linux,photo,android
+
+== Frame buffer console ==
