@@ -2,3 +2,5 @@
 #labels n311,linux,photo,android
 
 == Frame buffer console ==
+
+<img src=http://dl.getdropbox.com/u/195977/vga_console.jpg>
