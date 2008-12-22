@@ -8,6 +8,7 @@ set kernel "zImage-n311-2"
 #set initrd "initrd.img.gz" # Choose it if you use /dev/ram as root (not recommended)
 set mtype 1178 # 1248 for the kernels after Dec 22 2008.
 set bootspd 0
-set cmdline "root=/dev/mmcblk0p*_partitionnumber_* init=/sbin/init rootdelay=1" # Using SD Card as root
+# Using SD Card as root
+set cmdline "root=/dev/mmcblk0p*_partitionnumber_* init=/sbin/init rootdelay=1" 
 #set cmdline "root=/dev/ram init=/sbin/init rootdelay=1"
 bootlinux
