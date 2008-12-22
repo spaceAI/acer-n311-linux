@@ -4,12 +4,12 @@
 || *Component* || *Status*||
 || USB || Works ||
 || SD/MMC || Works ||
-|| Video || Works/not tested with X yet||
-|| Touchscreen || Work in progress ||
-|| Buttons || Work in progress ||
+|| Video || Works/no X support yet||
+|| Touchscreen || Works/not tested with X yet ||
+|| Buttons || Work ||
 || Battery || Not supported ||
 || Nand Flash|| Not supported ||
 || Serial Port || Not tested ||
 || Bluetooth || Not tested||
 || Wi-Fi || Not tested ||
-||Sound|| Not tested ||
+|| Sound || Not yet ||
