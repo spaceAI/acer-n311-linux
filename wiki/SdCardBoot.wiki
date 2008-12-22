@@ -9,8 +9,8 @@ Format your SD card and make 2 partitions:
 
 Then transfer the required files to the rootfs partition:
 
-  #>cp -pR *from* path/to/second/partition
+  ##>cp -pR *from* path/to/second/partition
 
 You can transfer the contents of initrd.img.gz to the card. To do this, unarchive the file, then mount it:
 
-  #>mount -o loop initrd.img /mnt/initrd
+  ##>mount -o loop initrd.img /mnt/initrd
