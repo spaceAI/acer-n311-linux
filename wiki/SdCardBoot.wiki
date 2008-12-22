@@ -1,0 +1,14 @@
+#summary How to place root filesystem on SD/MMC card
+#labels Phase-Deploy
+
+= Introduction =
+
+Format your SD card and make 2 partitions:
+  #  FAT partition for storing HaRET, initrd and kernel.
+  #  Ext2 or Ext3 partition for root filesystem.
+
+Then transfer the required files to the rootfs partition:
+' # cp -pR *from* path/to/second/partition'
+
+You can transfer the contents of initrd.img.gz to the card. To do this, unarchive the file, then mount it:
+' # mount -o loop initrd.img /mnt/initrd'
