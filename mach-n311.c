@@ -1,7 +1,8 @@
-/* linux/arch/arm/mach-s3c2410/mach-n311.c
+/* linux/arch/arm/mach-s3c2440/mach-n311.c
  *
  * Copyright (c) 2008 blondquirk <blondquirk@gmail.com>
- * Copyright (c) 2008 polachok
+ * Copyright (c) 2008 polachok <polachok AT gmail DOT com>
+ * Heavily based on mach-g500.c and mach-rx1950.c
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
