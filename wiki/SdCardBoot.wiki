@@ -1,5 +1,5 @@
 #summary How to place root filesystem on SD/MMC card
-#labels Phase-Deploy
+#labels Phase-Deploy,Featured
 
 = Introduction =
 Sometimes, when kernel is big enough, it fails to mount initrd. This seems to be the bootloader issue. In this case we place root filesystem on a card.
