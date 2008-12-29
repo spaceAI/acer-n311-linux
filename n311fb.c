@@ -348,7 +348,6 @@ static int n311fb_remove(struct platform_device *dev)
 	release_mem_region(VIDEOMEMSTART, videomemorysize);
 
 	framebuffer_release(info);
-	framebuffer_release(info);
 	}
 	return 0;
 }
