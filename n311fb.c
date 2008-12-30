@@ -171,6 +171,7 @@ static int n311fb_set_par(struct fb_info *info)
 	printk("\nn311fb: entered n311fb_set_par with xres_virtual %d,yres_virtual %d, %dbpp\n",
 				       info->var.xres_virtual,
 				       info->var.yres_virtual, info->var.bits_per_pixel);
+	info->fix.line_length = get_line_length(info->var.xres_virtual,	info->var.bits_per_pixel);
 	return 0;
 }
 
@@ -344,10 +345,8 @@ static int n311fb_remove(struct platform_device *dev)
 	if (info) {
 		unregister_framebuffer(info);
 		iounmap(videomemory);
-
-	release_mem_region(VIDEOMEMSTART, videomemorysize);
-
-	framebuffer_release(info);
+		release_mem_region(VIDEOMEMSTART, videomemorysize);
+		framebuffer_release(info);
 	}
 	return 0;
 }
