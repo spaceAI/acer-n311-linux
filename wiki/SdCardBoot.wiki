@@ -2,10 +2,10 @@
 #labels Phase-Deploy,Featured
 
 = Introduction =
-We need to place root filesystem on a card in two cases:
+We need to place root filesystem on SD/MMC card in two cases:
 
-  #1 Sometimes, when kernel is big enough, it fails to mount initrd. This seems to be the bootloader issue. In this case we place root filesystem on a card.
-  #2 We want to run complete system with GUI
+  #1 Sometimes, when kernel is big enough, it fails to mount initrd. This seems to be the bootloader issue.
+  #2 We want *to run complete system* with GUI
 
 == Formatting ==
 Format your SD card and *make 2 partitions*:
@@ -13,7 +13,7 @@ Format your SD card and *make 2 partitions*:
   #1 *FAT partition* for storing HaRET, initrd and kernel.
   #2 *Ext3 partition* for root filesystem.
 
-Then transfer the required files to the rootfs partition:
+Then *transfer the required files* to the rootfs partition:
 
   sudo tar -jxvf rootfs.tar.bz2 -C path/to/second/partition
 *or*
