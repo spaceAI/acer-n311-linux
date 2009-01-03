@@ -4,7 +4,7 @@
 = Introduction =
 We need to place root filesystem on SD/MMC card in two cases:
 
-  #1 Sometimes, when kernel is big enough, it fails to mount initrd. This seems to be the bootloader issue.
+  #1 When kernel is big enough (more than 1.7Mb), it fails to mount initrd. This seems to be the bootloader issue.
   #2 We want *to run complete system* with GUI
 
 == Formatting ==
