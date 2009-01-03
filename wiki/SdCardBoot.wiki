@@ -15,11 +15,11 @@ Format your SD card and *make 2 partitions*:
 
 Then transfer the required files to the rootfs partition:
 
-  # sudo tar -jxvf rootfs.tar.bz2 -C path/to/second/partition
+  sudo tar -jxvf rootfs.tar.bz2 -C path/to/second/partition
 *or*
-  # tar -zxvf rootfs.tar.gz -C path/to/second/partition
+  sudo tar -zxvf rootfs.tar.gz -C path/to/second/partition
 *or*
-  # sudo cp -pR path/to/rootfs path/to/second/partition
+  sudo cp -pR path/to/rootfs path/to/second/partition
 
 
 You can transfer the contents of initrd.img.gz to the card. To do this, unarchive the file, mount it, and copy as above.
