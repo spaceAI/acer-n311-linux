@@ -1,0 +1,3672 @@
+diff -urN linux-2.6.29/arch/arm/boot/compressed/Makefile linux-2.6.29.n311/arch/arm/boot/compressed/Makefile
+--- linux-2.6.29/arch/arm/boot/compressed/Makefile	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/boot/compressed/Makefile	2009-03-24 19:01:27.000000000 +0300
+@@ -77,7 +77,7 @@
+ # Supply ZRELADDR, INITRD_PHYS and PARAMS_PHYS to the decompressor via
+ # linker symbols.  We only define initrd_phys and params_phys if the
+ # machine class defined the corresponding makefile variable.
+-LDFLAGS_vmlinux := --defsym zreladdr=$(ZRELADDR)
++LDFLAGS_vmlinux := --defsym zreladdr="$(ZRELADDR)"
+ ifneq ($(INITRD_PHYS),)
+ LDFLAGS_vmlinux += --defsym initrd_phys=$(INITRD_PHYS)
+ endif
+diff -urN linux-2.6.29/arch/arm/boot/Makefile linux-2.6.29.n311/arch/arm/boot/Makefile
+--- linux-2.6.29/arch/arm/boot/Makefile	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/boot/Makefile	2009-03-24 19:56:27.000000000 +0300
+@@ -21,10 +21,17 @@
+ #   ZRELADDR == virt_to_phys(PAGE_OFFSET + TEXT_OFFSET)
+ #   PARAMS_PHYS must be within 4MB of ZRELADDR
+ #   INITRD_PHYS must be in RAM
++# note, we use ZRELADDR_c because mkuimage needs single hex value
++
+ ZRELADDR    := $(zreladdr-y)
++ZRELADDR_h  := $(subst 0x,,$(ZRELADDR))
++ZRELADDR_c  := 0x$(shell echo "ibase=16; obase=10; $(ZRELADDR_h)" | bc -l)
++
+ PARAMS_PHYS := $(params_phys-y)
+ INITRD_PHYS := $(initrd_phys-y)
+ 
++
++
+ export ZRELADDR INITRD_PHYS PARAMS_PHYS
+ 
+ targets := Image zImage xipImage bootpImage uImage
+@@ -61,7 +68,7 @@
+ 
+ quiet_cmd_uimage = UIMAGE  $@
+       cmd_uimage = $(CONFIG_SHELL) $(MKIMAGE) -A arm -O linux -T kernel \
+-		   -C none -a $(LOADADDR) -e $(LOADADDR) \
++		   -C none -a $(ZRELADDR_c) -e $(ZRELADDR_c) \
+ 		   -n 'Linux-$(KERNELRELEASE)' -d $< $@
+ 
+ ifeq ($(CONFIG_ZBOOT_ROM),y)
+diff -urN linux-2.6.29/arch/arm/kernel/Makefile linux-2.6.29.n311/arch/arm/kernel/Makefile
+--- linux-2.6.29/arch/arm/kernel/Makefile	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/kernel/Makefile	2009-03-24 19:58:20.000000000 +0300
+@@ -2,7 +2,7 @@
+ # Makefile for the linux kernel.
+ #
+ 
+-AFLAGS_head.o := -DTEXT_OFFSET=$(TEXT_OFFSET)
++AFLAGS_head.o := -DTEXT_OFFSET="$(TEXT_OFFSET)"
+ 
+ ifdef CONFIG_DYNAMIC_FTRACE
+ CFLAGS_REMOVE_ftrace.o = -pg
+diff -urN linux-2.6.29/arch/arm/mach-s3c2410/include/mach/ts.h linux-2.6.29.n311/arch/arm/mach-s3c2410/include/mach/ts.h
+--- linux-2.6.29/arch/arm/mach-s3c2410/include/mach/ts.h	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/mach-s3c2410/include/mach/ts.h	2009-03-24 21:31:07.000000000 +0300
+@@ -0,0 +1,35 @@
++/* arch/arm/mach-s3c2410/include/mach/ts.h
++ *
++ * Copyright (c) 2005 Arnaud Patard <arnaud.patard@rtp-net.org>
++ *
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ *
++ *  Changelog:
++ *     24-Mar-2005     RTP     Created file
++ *     03-Aug-2005     RTP     Renamed to ts.h
++ */
++
++#ifndef __ASM_ARM_TS_H
++#define __ASM_ARM_TS_H
++
++#include <../drivers/input/touchscreen/ts_filter.h>
++
++struct s3c2410_ts_mach_info {
++        int delay;
++        int presc;
++        /* array of pointers to filter APIs we want to use, in order
++         * ends on first NULL, all NULL is OK
++         */
++        struct ts_filter_api *filter_sequence[MAX_TS_FILTER_CHAIN];
++        /* array of configuration ints, one for each filter above */
++        void *filter_config[MAX_TS_FILTER_CHAIN];
++};
++
++void set_s3c2410ts_info(struct s3c2410_ts_mach_info *hard_s3c2410ts_info);
++
++#endif /* __ASM_ARM_TS_H */
++
+diff -urN linux-2.6.29/arch/arm/mach-s3c2440/Kconfig linux-2.6.29.n311/arch/arm/mach-s3c2440/Kconfig
+--- linux-2.6.29/arch/arm/mach-s3c2440/Kconfig	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/mach-s3c2440/Kconfig	2009-03-24 19:07:14.000000000 +0300
+@@ -79,5 +79,10 @@
+ 	help
+ 	  Say Y here if you are using the AT2440EVB development board
+ 
++config MACH_N311
++	bool "Acer N311"
++	depends on ARCH_S3C2440
++	select CPU_S3C2440
++
+ endmenu
+ 
+diff -urN linux-2.6.29/arch/arm/mach-s3c2440/mach-n311.c linux-2.6.29.n311/arch/arm/mach-s3c2440/mach-n311.c
+--- linux-2.6.29/arch/arm/mach-s3c2440/mach-n311.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/mach-s3c2440/mach-n311.c	2009-03-25 13:57:18.000000000 +0300
+@@ -0,0 +1,326 @@
++/* linux/arch/arm/mach-s3c2440/mach-n311.c
++ *
++ * Copyright (c) 2008 blondquirk <blondquirk@gmail.com>
++ * Copyright (c) 2009 polachok <polachok@gmail.com>
++ * Heavily based on mach-g500.c and mach-rx1950.c
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++*/
++
++#include <linux/kernel.h>
++#include <linux/types.h>
++#include <linux/interrupt.h>
++#include <linux/list.h>
++#include <linux/timer.h>
++#include <linux/init.h>
++#include <linux/serial_core.h>
++#include <linux/platform_device.h>
++#include <linux/ata_platform.h>
++#include <linux/i2c.h>
++#include <linux/io.h>
++#include <linux/lcd.h>
++#include <linux/backlight.h>
++#include <linux/sm501.h>
++#include <linux/sm501-regs.h>
++
++#include <asm/mach/arch.h>
++#include <asm/mach/map.h>
++#include <asm/mach/irq.h>
++
++#include <mach/anubis-map.h>
++#include <mach/anubis-irq.h>
++#include <mach/anubis-cpld.h>
++
++#include <mach/hardware.h>
++#include <mach/fb.h>
++#include <mach/ts.h>
++#include <asm/irq.h>
++#include <asm/mach-types.h>
++
++#include <plat/regs-serial.h>
++#include <plat/regs-timer.h>
++#include <mach/regs-gpio.h>
++#include <mach/regs-mem.h>
++#include <mach/regs-lcd.h>
++#include <mach/regs-irq.h>
++#include <linux/mtd/mtd.h>
++#include <linux/mtd/nand.h>
++#include <linux/mtd/nand_ecc.h>
++#include <linux/mtd/partitions.h>
++
++#include <net/ax88796.h>
++
++#include <plat/clock.h>
++#include <plat/devs.h>
++#include <plat/cpu.h>
++#include <plat/irq.h>
++#include <plat/pm.h>
++#include <plat/mci.h>
++#include <plat/nand.h>
++#include <plat/iic.h>
++
++#include <linux/mtd/nand.h>
++#include <linux/mtd/partitions.h>
++#include <linux/mtd/mtd.h>
++#include <linux/mmc/mmc.h>
++#include <linux/mmc/host.h>
++#include <linux/gpio_keys.h>
++#include <linux/input.h>
++
++#include <linux/leds.h>
++
++
++static struct map_desc n311_iodesc[] __initdata = {
++	/* nothing */
++};
++
++#define UCON S3C2410_UCON_DEFAULT | S3C2410_UCON_UCLK
++#define ULCON S3C2410_LCON_CS8 | S3C2410_LCON_PNONE | S3C2410_LCON_STOPB
++#define UFCON S3C2410_UFCON_RXTRIG8 | S3C2410_UFCON_FIFOMODE
++
++static struct s3c24xx_uart_clksrc n311_serial_clocks[] = {
++	[0] = {
++		.name   = "fclk",
++		.divisor  = 9,
++		.min_baud = 0,
++		.max_baud = 0,
++	},
++};
++
++static struct s3c2410_uartcfg n311_uartcfgs[] = {
++	[0] = {
++		.hwport	     = 0,
++		.flags	     = 0,
++		.ucon	     = 0x9fc5,
++		.ulcon	     = 0x2b,
++		.ufcon	     = 0xc1,
++		.clocks	     = n311_serial_clocks,
++		.clocks_size = ARRAY_SIZE(n311_serial_clocks),
++	},
++	[1] = {
++		.hwport	     = 1,
++		.flags	     = 0,
++		.ucon	     = 0x1c5,
++		.ulcon	     = 0x03,
++		.ufcon	     = 0x31,
++	},
++	[2] = {
++		.hwport	     = 2,
++		.flags	     = 0,
++		.ucon	     = 0x80c5,
++		.ulcon	     = 0x03,
++		.ufcon	     = 0x31,
++	}
++};
++
++static struct mtd_partition n311_nand_part[] = {
++	[0] = {
++		.name		= "Whole Flash",
++		.offset		= 0,
++		.size		= MTDPART_SIZ_FULL,
++		.mask_flags	= MTD_WRITEABLE,
++	}
++};
++
++static struct s3c2410_nand_set n311_nand_sets[] = {
++	[0] = {
++		.name		= "Internal",
++		.nr_chips	= 1,
++		.nr_partitions	= ARRAY_SIZE(n311_nand_part),
++		.partitions	= n311_nand_part,
++	},
++};
++
++static struct s3c2410_platform_nand n311_nand_info = {
++	.tacls		= 20,
++	.twrph0		= 60,
++	.twrph1		= 20,
++	.nr_sets	= ARRAY_SIZE(n311_nand_sets),
++	.sets		= n311_nand_sets,
++};
++
++static struct s3c2410_ts_mach_info n311_ts_cfg = {
++	.delay = 40000,
++	.presc = 32,
++};
++
++static void s3c2410_mmc_def_setpower(unsigned int to)
++{
++	s3c2410_gpio_cfgpin(S3C2410_GPA17, S3C2410_GPIO_OUTPUT);
++	s3c2410_gpio_setpin(S3C2410_GPA17, to);
++}
++
++static struct s3c24xx_mci_pdata n311_mmc_cfg = {
++	.gpio_detect  = S3C2410_GPF1,
++	//.set_power  = s3c2410_mmc_def_setpower,
++	.ocr_avail  = MMC_VDD_32_33,
++};
++
++//Using the keys to restart the machine
++static struct gpio_keys_button n311_buttons[] = {
++ {KEY_DELETE,   S3C2410_GPF0, 1, "Power button"},
++ {KEY_RESTART, S3C2410_GPF2, 0, "Reset button"},
++ //{KEY_COFFEE, S3C2410_GPG1, 1, "Key lock"}, // it's a switch
++ {KEY_LEFTALT, S3C2410_GPF4, 1, "Home button"},
++ {KEY_LEFTCTRL, S3C2410_GPF5, 1, "Calendar button"},
++ {KEY_C, S3C2410_GPF6, 1, "Contacts button"},
++ {KEY_D, S3C2410_GPF7, 1, "Mail button"},
++ {KEY_ENTER, S3C2410_GPG3, 1, "Ok button"},
++ {KEY_LEFT, S3C2410_GPG4, 1, "Left button"},
++ {KEY_DOWN, S3C2410_GPG5, 1, "Down button"},
++ {KEY_UP, S3C2410_GPG6, 1, "Up button"},
++ {KEY_RIGHT, S3C2410_GPG7, 1, "Right button"},
++ //{KEY_PAUSE, S3C2410_GPD1, 0, "Case open pin"}, // it's a switch
++};
++
++
++static struct gpio_keys_platform_data n311_button_data = {
++	.buttons	= n311_buttons,
++	.nbuttons	= ARRAY_SIZE(n311_buttons),
++};
++
++static struct platform_device n311_button_device = {
++	.name		= "gpio-keys",
++	.id		= -1,
++	.num_resources	= 0,
++	.dev		= {.platform_data = &n311_button_data,}
++};
++
++static struct gpio_led n311_leds[] = {
++	{
++		.name = "blue-around",
++		.gpio = S3C2410_GPD10,
++		.active_low = 0,
++		.default_trigger = "heartbeat",
++	},
++};
++
++static struct gpio_led_platform_data n311_led_data = {
++	.num_leds =     ARRAY_SIZE(n311_leds),
++	.leds =         n311_leds,
++};
++
++static struct platform_device n311_gpio_leds = {
++	.name =         "leds-gpio",
++	.id =           -1,
++	.dev = {
++		.platform_data = &n311_led_data,
++	}
++};
++
++static void n311_backlight_power(int on)
++{
++	s3c2410_gpio_setpin(S3C2410_GPB0, 0);
++	s3c2410_gpio_pullup(S3C2410_GPB0, 0);
++
++	s3c2410_gpio_cfgpin(S3C2410_GPB0,
++			(on) ? S3C2410_GPB0_TOUT0 : S3C2410_GPB0_OUTP);
++}
++
++static void n311_lcd_power(int on)
++{
++	s3c2410_gpio_setpin(S3C2410_GPC0, on);
++}
++
++static void n311_set_brightness(int tcmpb0)
++{
++	unsigned long tcfg0;
++	unsigned long tcfg1;
++	unsigned long tcon;
++
++	/* configure power on/off */
++	n311_backlight_power(tcmpb0 ? 1 : 0);
++
++
++	tcfg0=readl(S3C2410_TCFG0);
++	tcfg1=readl(S3C2410_TCFG1);
++
++	tcfg0 &= ~S3C2410_TCFG_PRESCALER0_MASK;
++	tcfg0 |= 0x18;
++
++	tcfg1 &= ~S3C2410_TCFG1_MUX0_MASK;
++	tcfg1 |= S3C2410_TCFG1_MUX0_DIV2;
++
++	writel(tcfg0, S3C2410_TCFG0);
++	writel(tcfg1, S3C2410_TCFG1);
++	writel(0x31, S3C2410_TCNTB(0));
++
++	tcon = readl(S3C2410_TCON);
++	tcon &= ~0x0F;
++	tcon |= S3C2410_TCON_T0RELOAD;
++	tcon |= S3C2410_TCON_T0MANUALUPD;
++
++	writel(tcon, S3C2410_TCON);
++	writel(0x31, S3C2410_TCNTB(0));
++	writel(tcmpb0, S3C2410_TCMPB(0));
++
++	/* start the timer running */
++	tcon |= S3C2410_TCON_T0START;
++	tcon &= ~S3C2410_TCON_T0MANUALUPD;
++	writel(tcon, S3C2410_TCON);
++}
++#ifdef BACKLIGHT
++static struct s3c2410_bl_mach_info n311_bl_cfg = {
++
++	.backlight_max          = 0x2c,
++	.backlight_default      = 0x16,
++	.backlight_power	= n311_backlight_power,
++	.set_brightness		= n311_set_brightness,
++	.lcd_power		= n311_lcd_power
++};
++#endif
++
++static struct platform_device *n311_devices[] __initdata = {
++	&s3c_device_rtc,
++	&s3c_device_usb,
++	&s3c_device_lcd,
++	&s3c_device_wdt,
++	&s3c_device_i2c0,
++	&s3c_device_iis,
++	&s3c_device_nand,
++	&s3c_device_usbgadget,
++	&s3c_device_ts,
++	&s3c_device_sdi,
++//	&s3c_device_bl,
++};
++
++static void __init n311_map_io(void)
++{
++	s3c_device_nand.dev.platform_data = &n311_nand_info;
++	s3c24xx_init_io(n311_iodesc, ARRAY_SIZE(n311_iodesc));
++	s3c24xx_init_clocks(16934000);
++	s3c24xx_init_uarts(n311_uartcfgs, ARRAY_SIZE(n311_uartcfgs));
++}
++
++static void __init n311_init_machine(void)
++{
++	platform_add_devices(n311_devices, ARRAY_SIZE(n311_devices));
++	set_s3c2410ts_info(&n311_ts_cfg);
++	s3c_device_sdi.dev.platform_data = &n311_mmc_cfg;
++ 	platform_device_register(&n311_button_device);
++	platform_device_register(&n311_gpio_leds);
++	s3c_i2c0_set_platdata(NULL);
++	//set_s3c2410bl_info(&n311_bl_cfg);
++	s3c2410_pm_init();
++	/* wake up source */
++  	s3c_irq_wake(IRQ_EINT1, 1);
++
++        /* Configure the LEDs (even if we have no LED support)*/
++ 	s3c2410_gpio_cfgpin(S3C2410_GPD10, S3C2410_GPD10_OUTP);
++	s3c2410_gpio_setpin(S3C2410_GPD10, 1);
++}
++
++
++MACHINE_START(N311, "N311")
++	/* Maintainer: blondquirk <blondquirk@gmail.com> */
++	.phys_io	= S3C2410_PA_UART,
++	.io_pg_offst	= (((u32)S3C24XX_VA_UART) >> 18) & 0xfffc,
++	.boot_params	= S3C2410_SDRAM_PA + 0x100,
++
++	.init_irq	= s3c24xx_init_irq,
++	.map_io		= n311_map_io,
++	.init_machine	= n311_init_machine,
++	.timer		= &s3c24xx_timer,
++MACHINE_END
+diff -urN linux-2.6.29/arch/arm/mach-s3c2440/Makefile linux-2.6.29.n311/arch/arm/mach-s3c2440/Makefile
+--- linux-2.6.29/arch/arm/mach-s3c2440/Makefile	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/mach-s3c2440/Makefile	2009-03-24 19:24:59.000000000 +0300
+@@ -22,3 +22,4 @@
+ obj-$(CONFIG_ARCH_S3C2440)	+= mach-smdk2440.o
+ obj-$(CONFIG_MACH_NEXCODER_2440) += mach-nexcoder.o
+ obj-$(CONFIG_MACH_AT2440EVB) += mach-at2440evb.o
++obj-$(CONFIG_MACH_N311) += mach-n311.o
+diff -urN linux-2.6.29/arch/arm/Makefile linux-2.6.29.n311/arch/arm/Makefile
+--- linux-2.6.29/arch/arm/Makefile	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/Makefile	2009-03-24 20:00:03.000000000 +0300
+@@ -11,7 +11,7 @@
+ # Copyright (C) 1995-2001 by Russell King
+ 
+ LDFLAGS_vmlinux	:=-p --no-undefined -X
+-CPPFLAGS_vmlinux.lds = -DTEXT_OFFSET=$(TEXT_OFFSET)
++CPPFLAGS_vmlinux.lds = -DTEXT_OFFSET="$(TEXT_OFFSET)"
+ OBJCOPYFLAGS	:=-O binary -R .note -R .note.gnu.build-id -R .comment -S
+ GZFLAGS		:=-9
+ #KBUILD_CFLAGS	+=-pipe
+@@ -158,6 +158,7 @@
+ endif
+ 
+ # The byte offset of the kernel image in RAM from the start of RAM.
++
+ TEXT_OFFSET := $(textofs-y)
+ 
+ # The first directory contains additional information for the boot setup code
+diff -urN linux-2.6.29/arch/arm/plat-s3c/include/plat/devs.h linux-2.6.29.n311/arch/arm/plat-s3c/include/plat/devs.h
+--- linux-2.6.29/arch/arm/plat-s3c/include/plat/devs.h	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/plat-s3c/include/plat/devs.h	2009-03-24 22:01:35.000000000 +0300
+@@ -34,6 +34,7 @@
+ extern struct platform_device s3c_device_rtc;
+ extern struct platform_device s3c_device_adc;
+ extern struct platform_device s3c_device_sdi;
++extern struct platform_device s3c_device_ts;
+ extern struct platform_device s3c_device_hsmmc0;
+ extern struct platform_device s3c_device_hsmmc1;
+ extern struct platform_device s3c_device_hsmmc2;
+diff -urN linux-2.6.29/arch/arm/plat-s3c/include/plat/uncompress.h linux-2.6.29.n311/arch/arm/plat-s3c/include/plat/uncompress.h
+--- linux-2.6.29/arch/arm/plat-s3c/include/plat/uncompress.h	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/plat-s3c/include/plat/uncompress.h	2009-03-24 19:03:49.000000000 +0300
+@@ -64,6 +64,9 @@
+ 
+ static void putc(int ch)
+ {
++/* HACK : the kernel is outputing data on the first uart during uncompress, but our
++          UART0 may not been initialized when jumping to kernel */
++#if 0
+ 	if (uart_rd(S3C2410_UFCON) & S3C2410_UFCON_FIFOMODE) {
+ 		int level;
+ 
+@@ -84,6 +87,7 @@
+ 
+ 	/* write byte to transmission register */
+ 	uart_wr(S3C2410_UTXH, ch);
++#endif
+ }
+ 
+ static inline void flush(void)
+diff -urN linux-2.6.29/arch/arm/plat-s3c24xx/devs.c linux-2.6.29.n311/arch/arm/plat-s3c24xx/devs.c
+--- linux-2.6.29/arch/arm/plat-s3c24xx/devs.c	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/plat-s3c24xx/devs.c	2009-03-24 21:59:23.000000000 +0300
+@@ -25,6 +25,7 @@
+ #include <asm/mach/map.h>
+ #include <asm/mach/irq.h>
+ #include <mach/fb.h>
++#include <mach/ts.h>
+ #include <mach/hardware.h>
+ #include <asm/irq.h>
+ 
+@@ -503,4 +504,22 @@
+ 
+ EXPORT_SYMBOL(s3c_device_camif);
+ 
++/* Touchscreen */
++struct platform_device s3c_device_ts = {
++        .name             = "s3c2410-ts",
++        .id               = -1,
++};
++
++EXPORT_SYMBOL(s3c_device_ts);
++
++static struct s3c2410_ts_mach_info s3c2410ts_info;
++
++void __init set_s3c2410ts_info(struct s3c2410_ts_mach_info *hard_s3c2410ts_info)
++{
++            memcpy(&s3c2410ts_info,hard_s3c2410ts_info,sizeof(struct s3c2410_ts_mach_info));
++                    s3c_device_ts.dev.platform_data = &s3c2410ts_info;
++}
++
++EXPORT_SYMBOL(set_s3c2410ts_info);
++
+ #endif // CONFIG_CPU_S32440
+diff -urN linux-2.6.29/arch/arm/plat-s3c24xx/pm.c linux-2.6.29.n311/arch/arm/plat-s3c24xx/pm.c
+--- linux-2.6.29/arch/arm/plat-s3c24xx/pm.c	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/arch/arm/plat-s3c24xx/pm.c	2009-03-24 19:11:44.000000000 +0300
+@@ -30,6 +30,7 @@
+ #include <linux/suspend.h>
+ #include <linux/errno.h>
+ #include <linux/time.h>
++#include <linux/delay.h>
+ #include <linux/interrupt.h>
+ #include <linux/crc32.h>
+ #include <linux/ioport.h>
+diff -urN linux-2.6.29/drivers/i2c/busses/i2c-s3c2410.c linux-2.6.29.n311/drivers/i2c/busses/i2c-s3c2410.c
+--- linux-2.6.29/drivers/i2c/busses/i2c-s3c2410.c	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/drivers/i2c/busses/i2c-s3c2410.c	2009-03-25 12:55:33.000000000 +0300
+@@ -454,6 +454,8 @@
+ 	unsigned long iicstat;
+ 	int timeout = 400;
+ 
++	s3c24xx_i2c_stop(i2c, 0);
++
+ 	while (timeout-- > 0) {
+ 		iicstat = readl(i2c->regs + S3C2410_IICSTAT);
+ 
+@@ -533,8 +535,10 @@
+ 	int ret;
+ 
+ 	for (retry = 0; retry < adap->retries; retry++) {
+-
++		
++		clk_enable(i2c->clk);
+ 		ret = s3c24xx_i2c_doxfer(i2c, msgs, num);
++		clk_disable(i2c->clk);
+ 
+ 		if (ret != -EAGAIN)
+ 			return ret;
+@@ -824,7 +828,7 @@
+ 
+ 	dev_dbg(&pdev->dev, "clock source %p\n", i2c->clk);
+ 
+-	clk_enable(i2c->clk);
++	//clk_enable(i2c->clk);
+ 
+ 	/* map the registers */
+ 
+@@ -923,7 +927,7 @@
+ 	kfree(i2c->ioarea);
+ 
+  err_clk:
+-	clk_disable(i2c->clk);
++	//clk_disable(i2c->clk);
+ 	clk_put(i2c->clk);
+ 
+  err_noclk:
+@@ -945,7 +949,7 @@
+ 	i2c_del_adapter(&i2c->adap);
+ 	free_irq(i2c->irq, i2c);
+ 
+-	clk_disable(i2c->clk);
++	//clk_disable(i2c->clk);
+ 	clk_put(i2c->clk);
+ 
+ 	iounmap(i2c->regs);
+diff -urN linux-2.6.29/drivers/input/touchscreen/Kconfig linux-2.6.29.n311/drivers/input/touchscreen/Kconfig
+--- linux-2.6.29/drivers/input/touchscreen/Kconfig	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/Kconfig	2009-03-24 21:22:21.000000000 +0300
+@@ -408,4 +408,16 @@
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called tsc2007.
+ 
++config TOUCHSCREEN_S3C2410
++    tristate "Samsung S3C2410 touchscreen input driver"
++    depends on ARCH_S3C2410 && INPUT && INPUT_TOUCHSCREEN
++    select SERIO
++    help
++       Say Y here if you have the s3c2410 touchscreen.
++
++       If unsure, say N.
++
++       To compile this driver as a module, choose M here: the
++       module will be called s3c2410_ts.
++
+ endif
+diff -urN linux-2.6.29/drivers/input/touchscreen/Makefile linux-2.6.29.n311/drivers/input/touchscreen/Makefile
+--- linux-2.6.29/drivers/input/touchscreen/Makefile	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/Makefile	2009-03-24 21:20:29.000000000 +0300
+@@ -30,6 +30,7 @@
+ obj-$(CONFIG_TOUCHSCREEN_WACOM_W8001)	+= wacom_w8001.o
+ obj-$(CONFIG_TOUCHSCREEN_WM97XX)	+= wm97xx-ts.o
+ obj-$(CONFIG_TOUCHSCREEN_DA9034)	+= da9034-ts.o
++obj-$(CONFIG_TOUCHSCREEN_S3C2410)	+= s3c2410_ts.o
+ wm97xx-ts-$(CONFIG_TOUCHSCREEN_WM9705)	+= wm9705.o
+ wm97xx-ts-$(CONFIG_TOUCHSCREEN_WM9712)	+= wm9712.o
+ wm97xx-ts-$(CONFIG_TOUCHSCREEN_WM9713)	+= wm9713.o
+diff -urN linux-2.6.29/drivers/input/touchscreen/s3c2410_ts.c linux-2.6.29.n311/drivers/input/touchscreen/s3c2410_ts.c
+--- linux-2.6.29/drivers/input/touchscreen/s3c2410_ts.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/s3c2410_ts.c	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,609 @@
++/*
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ *
++ * Copyright (c) 2004 Arnaud Patard <arnaud.patard@rtp-net.org>
++ * iPAQ H1940 touchscreen support
++ *
++ * ChangeLog
++ *
++ * 2004-09-05: Herbert Pötzl <herbert@13thfloor.at>
++ *      - added clock (de-)allocation code
++ *
++ * 2005-03-06: Arnaud Patard <arnaud.patard@rtp-net.org>
++ *      - h1940_ -> s3c2410 (this driver is now also used on the n30
++ *        machines :P)
++ *      - Debug messages are now enabled with the config option
++ *        TOUCHSCREEN_S3C2410_DEBUG
++ *      - Changed the way the value are read
++ *      - Input subsystem should now work
++ *      - Use ioremap and readl/writel
++ *
++ * 2005-03-23: Arnaud Patard <arnaud.patard@rtp-net.org>
++ *      - Make use of some undocumented features of the touchscreen
++ *        controller
++ *
++ * 2007-05-23: Harald Welte <laforge@openmoko.org>
++ *      - Add proper support for S32440
++ *
++ * 2008-06-23: Andy Green <andy@openmoko.com>
++ *      - removed averaging system
++ *      - added generic Touchscreen filter stuff
++ *
++ * 2008-11-27: Nelson Castillo <arhuaco@freaks-unidos.net>
++ *      - improve interrupt handling
++ */
++
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/slab.h>
++#include <linux/input.h>
++#include <linux/init.h>
++#include <linux/serio.h>
++#include <linux/timer.h>
++#include <linux/kfifo.h>
++#include <linux/delay.h>
++#include <linux/platform_device.h>
++#include <linux/clk.h>
++#include <asm/io.h>
++#include <asm/irq.h>
++
++#include <mach/regs-gpio.h>
++#include <mach/ts.h>
++
++#include <plat/regs-adc.h>
++
++#include "ts_filter.h"
++
++/* For ts.dev.id.version */
++#define S3C2410TSVERSION	0x0101
++
++#define TSC_SLEEP  (S3C2410_ADCTSC_PULL_UP_DISABLE | S3C2410_ADCTSC_XY_PST(0))
++
++#define WAIT4INT(x)  (((x)<<8) | \
++		     S3C2410_ADCTSC_YM_SEN | \
++		     S3C2410_ADCTSC_YP_SEN | \
++		     S3C2410_ADCTSC_XP_SEN | \
++		     S3C2410_ADCTSC_XY_PST(3))
++
++#define AUTOPST	     (S3C2410_ADCTSC_YM_SEN | \
++		      S3C2410_ADCTSC_YP_SEN | \
++		      S3C2410_ADCTSC_XP_SEN | \
++		      S3C2410_ADCTSC_AUTO_PST | \
++		      S3C2410_ADCTSC_XY_PST(0))
++
++#define DEBUG_LVL    KERN_DEBUG
++
++MODULE_AUTHOR("Arnaud Patard <arnaud.patard@rtp-net.org>");
++MODULE_DESCRIPTION("s3c2410 touchscreen driver");
++MODULE_LICENSE("GPL");
++
++/*
++ * Definitions & global arrays.
++ */
++
++static char *s3c2410ts_name = "s3c2410 TouchScreen";
++
++#define TS_RELEASE_TIMEOUT (HZ >> 7 ? HZ >> 7 : 1) /* 8ms (5ms if HZ is 200) */
++#define TS_EVENT_FIFO_SIZE (2 << 6) /* must be a power of 2 */
++
++#define TS_STATE_STANDBY 0 /* initial state */
++#define TS_STATE_PRESSED 1
++#define TS_STATE_RELEASE_PENDING 2
++#define TS_STATE_RELEASE 3
++
++/*
++ * Per-touchscreen data.
++ */
++
++struct s3c2410ts {
++	struct input_dev *dev;
++	struct ts_filter *tsf[MAX_TS_FILTER_CHAIN];
++	int coords[2]; /* just X and Y for us */
++	int is_down;
++	int state;
++	struct kfifo *event_fifo;
++};
++
++static struct s3c2410ts ts;
++
++static void __iomem *base_addr;
++
++/*
++ * A few low level functions.
++ */
++
++static inline void s3c2410_ts_connect(void)
++{
++	s3c2410_gpio_cfgpin(S3C2410_GPG12, S3C2410_GPG12_XMON);
++	s3c2410_gpio_cfgpin(S3C2410_GPG13, S3C2410_GPG13_nXPON);
++	s3c2410_gpio_cfgpin(S3C2410_GPG14, S3C2410_GPG14_YMON);
++	s3c2410_gpio_cfgpin(S3C2410_GPG15, S3C2410_GPG15_nYPON);
++}
++
++static void s3c2410_ts_start_adc_conversion(void)
++{
++	writel(S3C2410_ADCTSC_PULL_UP_DISABLE | AUTOPST,
++	       base_addr + S3C2410_ADCTSC);
++	writel(readl(base_addr + S3C2410_ADCCON) | S3C2410_ADCCON_ENABLE_START,
++	       base_addr + S3C2410_ADCCON);
++}
++
++/*
++ * Just send the input events.
++ */
++
++enum ts_input_event {IE_DOWN = 0, IE_UP};
++
++static void ts_input_report(int event, int coords[])
++{
++#ifdef CONFIG_TOUCHSCREEN_S3C2410_DEBUG
++	static char *s[] = {"down", "up"};
++	struct timeval tv;
++
++	do_gettimeofday(&tv);
++#endif
++
++	if (event == IE_DOWN) {
++		input_report_abs(ts.dev, ABS_X, coords[0]);
++		input_report_abs(ts.dev, ABS_Y, coords[1]);
++		input_report_key(ts.dev, BTN_TOUCH, 1);
++		input_report_abs(ts.dev, ABS_PRESSURE, 1);
++
++#ifdef CONFIG_TOUCHSCREEN_S3C2410_DEBUG
++		printk(DEBUG_LVL "T:%06d %6s (X:%03d, Y:%03d)\n",
++		       (int)tv.tv_usec, s[event], coords[0], coords[1]);
++#endif
++	} else {
++		input_report_key(ts.dev, BTN_TOUCH, 0);
++		input_report_abs(ts.dev, ABS_PRESSURE, 0);
++
++#ifdef CONFIG_TOUCHSCREEN_S3C2410_DEBUG
++		printk(DEBUG_LVL "T:%06d %6s\n",
++		       (int)tv.tv_usec, s[event]);
++#endif
++	}
++
++	input_sync(ts.dev);
++}
++
++/*
++ * Manage the state of the touchscreen.
++ */
++
++static void event_send_timer_f(unsigned long data);
++
++static struct timer_list event_send_timer =
++		TIMER_INITIALIZER(event_send_timer_f, 0, 0);
++
++static void event_send_timer_f(unsigned long data)
++{
++	static int noop_counter;
++	int event_type;
++
++	while (__kfifo_get(ts.event_fifo, (unsigned char *)&event_type,
++			   sizeof(int))) {
++		int buf[2];
++
++		switch (event_type) {
++		case 'D':
++			if (ts.state == TS_STATE_RELEASE_PENDING)
++				/* Ignore short UP event */
++				ts.state = TS_STATE_PRESSED;
++			break;
++
++		case 'U':
++			ts.state = TS_STATE_RELEASE_PENDING;
++			break;
++
++		case 'P':
++			if (ts.is_down) /* stylus_action needs a conversion */
++				s3c2410_ts_start_adc_conversion();
++
++			if (unlikely(__kfifo_get(ts.event_fifo,
++						 (unsigned char *)buf,
++						 sizeof(int) * 2)
++				     != sizeof(int) * 2))
++				goto ts_exit_error;
++
++			ts_input_report(IE_DOWN, buf);
++			ts.state = TS_STATE_PRESSED;
++			break;
++
++		default:
++			goto ts_exit_error;
++		}
++
++		noop_counter = 0;
++	}
++
++	if (noop_counter++ >= 1) {
++		noop_counter = 0;
++		if (ts.state == TS_STATE_RELEASE_PENDING) {
++			/* We delay the UP event for a
++			 * while to avoid jitter. If we get a DOWN
++			 * event we do not send it. */
++
++			ts_input_report(IE_UP, NULL);
++			ts.state = TS_STATE_STANDBY;
++
++			if (ts.tsf[0])
++				(ts.tsf[0]->api->clear)(ts.tsf[0]);
++		}
++	} else {
++		mod_timer(&event_send_timer, jiffies + TS_RELEASE_TIMEOUT);
++	}
++
++	return;
++
++ts_exit_error: /* should not happen unless we have a bug */
++	printk(KERN_ERR __FILE__ ": event_send_timer_f failed\n");
++}
++
++/*
++ * Manage interrupts.
++ */
++
++static irqreturn_t stylus_updown(int irq, void *dev_id)
++{
++	unsigned long data0;
++	unsigned long data1;
++	int event_type;
++
++	data0 = readl(base_addr+S3C2410_ADCDAT0);
++	data1 = readl(base_addr+S3C2410_ADCDAT1);
++
++	ts.is_down = (!(data0 & S3C2410_ADCDAT0_UPDOWN)) &&
++					    (!(data1 & S3C2410_ADCDAT0_UPDOWN));
++
++	event_type = ts.is_down ? 'D' : 'U';
++
++	if (unlikely(__kfifo_put(ts.event_fifo, (unsigned char *)&event_type,
++		     sizeof(int)) != sizeof(int))) /* should not happen */
++		printk(KERN_ERR __FILE__": stylus_updown lost event!\n");
++
++	if (ts.is_down)
++		s3c2410_ts_start_adc_conversion();
++	else
++		writel(WAIT4INT(0), base_addr+S3C2410_ADCTSC);
++
++	mod_timer(&event_send_timer, jiffies + 1);
++
++	return IRQ_HANDLED;
++}
++
++static irqreturn_t stylus_action(int irq, void *dev_id)
++{
++	int buf[3];
++
++	/* grab the ADC results */
++	ts.coords[0] = readl(base_addr + S3C2410_ADCDAT0) &
++						    S3C2410_ADCDAT0_XPDATA_MASK;
++	ts.coords[1] = readl(base_addr + S3C2410_ADCDAT1) &
++						    S3C2410_ADCDAT1_YPDATA_MASK;
++
++	if (ts.tsf[0]) { /* filtering is enabled, don't use raw directly */
++		switch ((ts.tsf[0]->api->process)(ts.tsf[0], &ts.coords[0])) {
++		case 0:	/*
++			 * no real sample came out of processing yet,
++			 * get another raw result to feed it
++			 */
++			s3c2410_ts_start_adc_conversion();
++			return IRQ_HANDLED;
++		case 1:	/* filters are ready to deliver a sample */
++			(ts.tsf[0]->api->scale)(ts.tsf[0], &ts.coords[0]);
++			break;
++		case -1:
++			/* error in filters, ignore the event */
++			(ts.tsf[0]->api->clear)(ts.tsf[0]);
++			writel(WAIT4INT(1), base_addr + S3C2410_ADCTSC);
++			return IRQ_HANDLED;
++		default:
++			printk(KERN_ERR":stylus_action error\n");
++		}
++	}
++
++	/* We use a buffer because want an atomic operation */
++	buf[0] = 'P';
++	buf[1] = ts.coords[0];
++	buf[2] = ts.coords[1];
++
++	if (unlikely(__kfifo_put(ts.event_fifo, (unsigned char *)buf,
++		     sizeof(int) * 3) != sizeof(int) * 3))
++		/* should not happen */
++			printk(KERN_ERR":stylus_action error\n");
++
++	writel(WAIT4INT(1), base_addr + S3C2410_ADCTSC);
++	mod_timer(&event_send_timer, jiffies + 1);
++
++	return IRQ_HANDLED;
++}
++
++static struct clk	*adc_clock;
++
++/*
++ * The functions for inserting/removing us as a module.
++ */
++
++static int __init s3c2410ts_probe(struct platform_device *pdev)
++{
++	int rc;
++	struct s3c2410_ts_mach_info *info;
++	struct input_dev *input_dev;
++	int ret = 0;
++
++	dev_info(&pdev->dev, "Starting\n");
++
++	info = (struct s3c2410_ts_mach_info *)pdev->dev.platform_data;
++
++	if (!info)
++	{
++		dev_err(&pdev->dev, "Hm... too bad: no platform data for ts\n");
++		return -EINVAL;
++	}
++
++#ifdef CONFIG_TOUCHSCREEN_S3C2410_DEBUG
++	printk(DEBUG_LVL "Entering s3c2410ts_init\n");
++#endif
++
++	adc_clock = clk_get(NULL, "adc");
++	if (!adc_clock) {
++		dev_err(&pdev->dev, "failed to get adc clock source\n");
++		return -ENOENT;
++	}
++	clk_enable(adc_clock);
++
++#ifdef CONFIG_TOUCHSCREEN_S3C2410_DEBUG
++	printk(DEBUG_LVL "got and enabled clock\n");
++#endif
++
++	base_addr = ioremap(S3C2410_PA_ADC,0x20);
++	if (base_addr == NULL) {
++		dev_err(&pdev->dev, "Failed to remap register block\n");
++		ret = -ENOMEM;
++		goto bail0;
++	}
++
++
++	/* If we acutally are a S3C2410: Configure GPIOs */
++	if (!strcmp(pdev->name, "s3c2410-ts"))
++		s3c2410_ts_connect();
++
++	if ((info->presc & 0xff) > 0)
++		writel(S3C2410_ADCCON_PRSCEN |
++		       S3C2410_ADCCON_PRSCVL(info->presc&0xFF),
++						    base_addr + S3C2410_ADCCON);
++	else
++		writel(0, base_addr+S3C2410_ADCCON);
++
++	/* Initialise registers */
++	if ((info->delay & 0xffff) > 0)
++		writel(info->delay & 0xffff,  base_addr + S3C2410_ADCDLY);
++
++	writel(WAIT4INT(0), base_addr + S3C2410_ADCTSC);
++
++	/* Initialise input stuff */
++	memset(&ts, 0, sizeof(struct s3c2410ts));
++	input_dev = input_allocate_device();
++
++	if (!input_dev) {
++		dev_err(&pdev->dev, "Unable to allocate the input device\n");
++		ret = -ENOMEM;
++		goto bail1;
++	}
++
++	ts.dev = input_dev;
++	ts.dev->evbit[0] = BIT_MASK(EV_SYN) | BIT_MASK(EV_KEY) |
++			   BIT_MASK(EV_ABS);
++	ts.dev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
++	input_set_abs_params(ts.dev, ABS_X, 0, 0x3FF, 0, 0);
++	input_set_abs_params(ts.dev, ABS_Y, 0, 0x3FF, 0, 0);
++	input_set_abs_params(ts.dev, ABS_PRESSURE, 0, 1, 0, 0);
++
++	ts.dev->name = s3c2410ts_name;
++	ts.dev->id.bustype = BUS_RS232;
++	ts.dev->id.vendor = 0xDEAD;
++	ts.dev->id.product = 0xBEEF;
++	ts.dev->id.version = S3C2410TSVERSION;
++	ts.state = TS_STATE_STANDBY;
++	ts.event_fifo = kfifo_alloc(TS_EVENT_FIFO_SIZE, GFP_KERNEL, NULL);
++	if (IS_ERR(ts.event_fifo)) {
++		ret = -EIO;
++		goto bail2;
++	}
++
++	/* create the filter chain set up for the 2 coordinates we produce */
++	ret = ts_filter_create_chain(
++		pdev, (struct ts_filter_api **)&info->filter_sequence,
++		(void *)&info->filter_config, ts.tsf, ARRAY_SIZE(ts.coords));
++	if (ret)
++		dev_info(&pdev->dev, "%d filter(s) initialized\n", ret);
++	else /* this is OK, just means there won't be any filtering */
++		dev_info(&pdev->dev, "Unfiltered output selected\n");
++
++	if (ts.tsf[0])
++		(ts.tsf[0]->api->clear)(ts.tsf[0]);
++	else
++		dev_info(&pdev->dev, "No filtering\n");
++
++	/* Get irqs */
++	if (request_irq(IRQ_ADC, stylus_action, IRQF_SAMPLE_RANDOM,
++						    "s3c2410_action", ts.dev)) {
++		dev_err(&pdev->dev, "Could not allocate ts IRQ_ADC !\n");
++		iounmap(base_addr);
++		ret = -EIO;
++		goto bail3;
++	}
++	if (request_irq(IRQ_TC, stylus_updown, IRQF_SAMPLE_RANDOM,
++			"s3c2410_action", ts.dev)) {
++		dev_err(&pdev->dev, "Could not allocate ts IRQ_TC !\n");
++		free_irq(IRQ_ADC, ts.dev);
++		iounmap(base_addr);
++		ret = -EIO;
++		goto bail4;
++	}
++
++	dev_info(&pdev->dev, "successfully loaded\n");
++
++	/* All went ok, so register to the input system */
++	rc = input_register_device(ts.dev);
++	if (rc) {
++		ret = -EIO;
++		goto bail5;
++	}
++
++	return 0;
++
++bail5:
++	free_irq(IRQ_TC, ts.dev);
++	free_irq(IRQ_ADC, ts.dev);
++	clk_disable(adc_clock);
++	iounmap(base_addr);
++	disable_irq(IRQ_TC);
++bail4:
++	disable_irq(IRQ_ADC);
++bail3:
++	ts_filter_destroy_chain(pdev, ts.tsf);
++	kfifo_free(ts.event_fifo);
++bail2:
++	input_unregister_device(ts.dev);
++bail1:
++	iounmap(base_addr);
++bail0:
++
++	return ret;
++}
++
++static int s3c2410ts_remove(struct platform_device *pdev)
++{
++	disable_irq(IRQ_ADC);
++	disable_irq(IRQ_TC);
++	free_irq(IRQ_TC,ts.dev);
++	free_irq(IRQ_ADC,ts.dev);
++
++	if (adc_clock) {
++		clk_disable(adc_clock);
++		clk_put(adc_clock);
++		adc_clock = NULL;
++	}
++
++	input_unregister_device(ts.dev);
++	iounmap(base_addr);
++
++	ts_filter_destroy_chain(pdev, ts.tsf);
++
++	kfifo_free(ts.event_fifo);
++
++	return 0;
++}
++
++#ifdef CONFIG_PM
++static int s3c2410ts_suspend(struct platform_device *pdev, pm_message_t state)
++{
++	writel(TSC_SLEEP, base_addr+S3C2410_ADCTSC);
++	writel(readl(base_addr+S3C2410_ADCCON) | S3C2410_ADCCON_STDBM,
++	       base_addr+S3C2410_ADCCON);
++
++	disable_irq(IRQ_ADC);
++	disable_irq(IRQ_TC);
++
++	clk_disable(adc_clock);
++
++	return 0;
++}
++
++static int s3c2410ts_resume(struct platform_device *pdev)
++{
++	struct s3c2410_ts_mach_info *info =
++		( struct s3c2410_ts_mach_info *)pdev->dev.platform_data;
++
++	clk_enable(adc_clock);
++	mdelay(1);
++
++	if (ts.tsf[0])
++		(ts.tsf[0]->api->clear)(ts.tsf[0]);
++
++	enable_irq(IRQ_ADC);
++	enable_irq(IRQ_TC);
++
++	if ((info->presc&0xff) > 0)
++		writel(S3C2410_ADCCON_PRSCEN |
++		       S3C2410_ADCCON_PRSCVL(info->presc&0xFF),
++						      base_addr+S3C2410_ADCCON);
++	else
++		writel(0,base_addr+S3C2410_ADCCON);
++
++	/* Initialise registers */
++	if ((info->delay & 0xffff) > 0)
++		writel(info->delay & 0xffff,  base_addr+S3C2410_ADCDLY);
++
++	writel(WAIT4INT(0), base_addr+S3C2410_ADCTSC);
++
++	return 0;
++}
++
++#else
++#define s3c2410ts_suspend NULL
++#define s3c2410ts_resume  NULL
++#endif
++
++static struct platform_driver s3c2410ts_driver = {
++       .driver         = {
++	       .name   = "s3c2410-ts",
++	       .owner  = THIS_MODULE,
++       },
++       .probe          = s3c2410ts_probe,
++       .remove         = s3c2410ts_remove,
++       .suspend        = s3c2410ts_suspend,
++       .resume         = s3c2410ts_resume,
++
++};
++
++static struct platform_driver s3c2440ts_driver = {
++       .driver         = {
++	       .name   = "s3c2440-ts",
++	       .owner  = THIS_MODULE,
++       },
++       .probe          = s3c2410ts_probe,
++       .remove         = s3c2410ts_remove,
++       .suspend        = s3c2410ts_suspend,
++       .resume         = s3c2410ts_resume,
++
++};
++
++static int __init s3c2410ts_init(void)
++{
++	int rc;
++
++	rc = platform_driver_register(&s3c2410ts_driver);
++	if (rc < 0)
++		return rc;
++
++	rc = platform_driver_register(&s3c2440ts_driver);
++	if (rc < 0)
++		platform_driver_unregister(&s3c2410ts_driver);
++
++	return rc;
++}
++
++static void __exit s3c2410ts_exit(void)
++{
++	platform_driver_unregister(&s3c2440ts_driver);
++	platform_driver_unregister(&s3c2410ts_driver);
++}
++
++module_init(s3c2410ts_init);
++module_exit(s3c2410ts_exit);
++
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter.c linux-2.6.29.n311/drivers/input/touchscreen/ts_filter.c
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter.c	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,73 @@
++/*
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ *
++ * Copyright (c) 2008 Andy Green <andy@openmoko.com>
++ */
++
++#include <linux/kernel.h>
++#include <linux/device.h>
++#include "ts_filter.h"
++
++static DEFINE_MUTEX(chain_mutex);
++
++int ts_filter_create_chain(struct platform_device *pdev,
++			   struct ts_filter_api **api, void **config,
++			   struct ts_filter **arr, int count_coords)
++{
++	int count = 0;
++	struct ts_filter *last = NULL;
++
++	if (!api)
++		return 0;
++
++	mutex_lock(&chain_mutex);
++
++	while (*api) {
++		*arr = ((*api)->create)(pdev, *config++, count_coords);
++		if (!*arr) {
++			printk(KERN_ERR "Filter %d failed init\n", count);
++			return count;
++		}
++		(*arr)->api = *api++;
++		if (last)
++			last->next = *arr;
++		last = *arr;
++		arr++;
++		count++;
++	}
++
++	mutex_unlock(&chain_mutex);
++
++	return count;
++}
++EXPORT_SYMBOL_GPL(ts_filter_create_chain);
++
++void ts_filter_destroy_chain(struct platform_device *pdev,
++			     struct ts_filter **arr)
++{
++	struct ts_filter **first = arr;
++
++	mutex_lock(&chain_mutex);
++
++	while (*arr) {
++		((*arr)->api->destroy)(pdev, *arr);
++		arr++;
++	}
++	*first = NULL;
++
++	mutex_unlock(&chain_mutex);
++}
++EXPORT_SYMBOL_GPL(ts_filter_destroy_chain);
++
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter_group.c linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_group.c
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter_group.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_group.c	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,221 @@
++/*
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ *
++ * Copyright (C) 2008 by Openmoko, Inc.
++ * Author: Nelson Castillo <arhuaco@freaks-unidos.net>
++ * All rights reserved.
++ *
++ * This filter is useful to reject samples that are not reliable. We consider
++ * that a sample is not reliable if it deviates form the Majority.
++ *
++ * 1) We collect S samples.
++ *
++ * 2) For each dimension:
++ *
++ *  - We sort the points.
++ *  - Points that are "close enough" are considered to be in the same set.
++ *  - We choose the set with more elements. If more than "threshold"
++ *    points are in this set we use the first and the last point of the set
++ *    to define the valid range for this dimension [min, max], otherwise we
++ *    discard all the points and go to step 1.
++ *
++ * 3) We consider the unsorted S samples and try to feed them to the next
++ *    filter in the chain. If one of the points of each sample
++ *    is not in the allowed range for its dimension, we discard the sample.
++ *
++ */
++
++#include <linux/kernel.h>
++#include <linux/slab.h>
++#include <linux/sort.h>
++#include "ts_filter_group.h"
++
++static void ts_filter_group_clear_internal(struct ts_filter_group *tsfg,
++					   int attempts)
++{
++	tsfg->N = 0;
++	tsfg->tries_left = attempts;
++}
++
++static void ts_filter_group_clear(struct ts_filter *tsf)
++{
++	struct ts_filter_group *tsfg = (struct ts_filter_group *)tsf;
++
++	ts_filter_group_clear_internal(tsfg, tsfg->config->attempts);
++
++	if (tsf->next) /* chain */
++		(tsf->next->api->clear)(tsf->next);
++}
++
++static struct ts_filter *ts_filter_group_create(struct platform_device *pdev,
++						void *conf, int count_coords)
++{
++	struct ts_filter_group *tsfg;
++	int i;
++
++	BUG_ON((count_coords < 1) || (count_coords > MAX_TS_FILTER_COORDS));
++
++	tsfg = kzalloc(sizeof(struct ts_filter_group), GFP_KERNEL);
++	if (!tsfg)
++		return NULL;
++
++	tsfg->config = (struct ts_filter_group_configuration *)conf;
++	tsfg->tsf.count_coords = count_coords;
++
++	BUG_ON(tsfg->config->attempts <= 0);
++
++	tsfg->samples[0] = kmalloc((2 + count_coords) * sizeof(int) *
++				   tsfg->config->extent, GFP_KERNEL);
++	if (!tsfg->samples[0]) {
++		kfree(tsfg);
++		return NULL;
++	}
++	for (i = 1; i < count_coords; ++i)
++		tsfg->samples[i] = tsfg->samples[0] + i * tsfg->config->extent;
++	tsfg->sorted_samples = tsfg->samples[0] + count_coords *
++			       tsfg->config->extent;
++	tsfg->group_size = tsfg->samples[0] + (1 + count_coords) *
++			       tsfg->config->extent;
++
++	ts_filter_group_clear_internal(tsfg, tsfg->config->attempts);
++
++	printk(KERN_INFO"  Created group ts filter len %d depth %d close %d "
++			"thresh %d\n", tsfg->config->extent, count_coords,
++			tsfg->config->close_enough, tsfg->config->threshold);
++
++	return &tsfg->tsf;
++}
++
++static void ts_filter_group_destroy(struct platform_device *pdev,
++				    struct ts_filter *tsf)
++{
++	struct ts_filter_group *tsfg = (struct ts_filter_group *)tsf;
++
++	kfree(tsfg->samples[0]); /* first guy has pointer from kmalloc */
++	kfree(tsf);
++}
++
++static void ts_filter_group_scale(struct ts_filter *tsf, int *coords)
++{
++	if (tsf->next)
++		(tsf->next->api->scale)(tsf->next, coords);
++}
++
++static int int_cmp(const void *_a, const void *_b)
++{
++	const int *a = _a;
++	const int *b = _b;
++
++	if (*a > *b)
++		return 1;
++	if (*a < *b)
++		return -1;
++	return 0;
++}
++
++static int ts_filter_group_process(struct ts_filter *tsf, int *coords)
++{
++	struct ts_filter_group *tsfg = (struct ts_filter_group *)tsf;
++	int n;
++	int i;
++	int ret = 0; /* ask for more samples by default */
++
++	BUG_ON(tsfg->N >= tsfg->config->extent);
++
++	for (n = 0; n < tsf->count_coords; n++)
++		tsfg->samples[n][tsfg->N] = coords[n];
++
++	if (++tsfg->N < tsfg->config->extent)
++		return 0;	/* we meed more samples */
++
++	for (n = 0; n < tsfg->tsf.count_coords; n++) {
++		int *v = tsfg->sorted_samples;
++		int ngroups = 0;
++		int best_size;
++		int best_idx = 0;
++		int idx = 0;
++
++		memcpy(v, tsfg->samples[n], tsfg->N * sizeof(int));
++		sort(v, tsfg->N, sizeof(int), int_cmp, NULL);
++
++		tsfg->group_size[0] = 1;
++		for (i = 1; i < tsfg->N; ++i) {
++			if (v[i] - v[i - 1] <= tsfg->config->close_enough)
++				tsfg->group_size[ngroups]++;
++			else
++				tsfg->group_size[++ngroups] = 1;
++		}
++		ngroups++;
++
++		best_size = tsfg->group_size[0];
++		for (i = 1; i < ngroups; i++) {
++			idx += tsfg->group_size[i - 1];
++			if (best_size < tsfg->group_size[i]) {
++				best_size = tsfg->group_size[i];
++				best_idx = idx;
++			}
++		}
++
++		if (best_size < tsfg->config->threshold) {
++			/* this set is not good enough for us */
++			if (--tsfg->tries_left) {
++				ts_filter_group_clear_internal
++					(tsfg, tsfg->tries_left);
++				return 0; /* ask for more samples */
++			}
++			return -1; /* we give up */
++		}
++
++		tsfg->range_min[n] = v[best_idx];
++		tsfg->range_max[n] = v[best_idx + best_size - 1];
++	}
++
++	for (i = 0; i < tsfg->N; ++i) {
++		int r;
++
++		for (n = 0; n < tsfg->tsf.count_coords; ++n) {
++			coords[n] = tsfg->samples[n][i];
++			if (coords[n] < tsfg->range_min[n] ||
++			    coords[n] > tsfg->range_max[n])
++				break;
++		}
++
++		if (n != tsfg->tsf.count_coords) /* sample not OK */
++			continue;
++
++		if (tsf->next) {
++			r = (tsf->next->api->process)(tsf->next, coords);
++			if (r)  {
++				ret = r;
++				break;
++			}
++		} else if (i == tsfg->N - 1) {
++			ret = 1;
++		}
++	}
++
++	ts_filter_group_clear_internal(tsfg, tsfg->config->attempts);
++
++	return ret;
++}
++
++struct ts_filter_api ts_filter_group_api = {
++	.create = ts_filter_group_create,
++	.destroy = ts_filter_group_destroy,
++	.clear = ts_filter_group_clear,
++	.process = ts_filter_group_process,
++	.scale = ts_filter_group_scale,
++};
++
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter_group.h linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_group.h
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter_group.h	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_group.h	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,39 @@
++#ifndef __TS_FILTER_GROUP_H__
++#define __TS_FILTER_GROUP_H__
++
++#include "ts_filter.h"
++
++/*
++ * Touchscreen group filter.
++ *
++ * Copyright (C) 2008 by Openmoko, Inc.
++ * Author: Nelson Castillo <arhuaco@freaks-unidos.net>
++ *
++ */
++
++struct ts_filter_group_configuration {
++	int extent;
++	int close_enough;
++	int threshold;
++	int attempts;
++};
++
++struct ts_filter_group {
++	struct ts_filter tsf;
++	struct ts_filter_group_configuration *config;
++
++	int N;		/* How many samples we have */
++	int *samples[MAX_TS_FILTER_COORDS];	/* the samples, our input */
++
++	int *group_size;	/* used for temporal computations */
++	int *sorted_samples;	/* used for temporal computations */
++
++	int range_max[MAX_TS_FILTER_COORDS];	/* max computed ranges */
++	int range_min[MAX_TS_FILTER_COORDS];	/* min computed ranges */
++
++	int tries_left;		/* We finish if we don't get enough samples */
++};
++
++extern struct ts_filter_api ts_filter_group_api;
++
++#endif
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter.h linux-2.6.29.n311/drivers/input/touchscreen/ts_filter.h
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter.h	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter.h	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,62 @@
++#ifndef __TS_FILTER_H__
++#define __TS_FILTER_H__
++
++/*
++ * Touchscreen filter.
++ *
++ * (c) 2008 Andy Green <andy@openmoko.com>
++ */
++
++#include <linux/platform_device.h>
++
++#define MAX_TS_FILTER_CHAIN		8  /* Max. filters we can chain up. */
++#define MAX_TS_FILTER_COORDS		3  /* X, Y and Z (pressure). */
++
++struct ts_filter;
++
++/* Operations that a filter can perform. */
++
++struct ts_filter_api {
++	struct ts_filter * (*create)(struct platform_device *pdev, void *config,
++				     int count_coords);
++	void (*destroy)(struct platform_device *pdev, struct ts_filter *filter);
++	void (*clear)(struct ts_filter *filter);
++	int (*process)(struct ts_filter *filter, int *coords);
++	void (*scale)(struct ts_filter *filter, int *coords);
++};
++
++/*
++ * This is the common part of all filters.
++ * We use this type as an otherwise opaque handle on to
++ * the actual filter.  Therefore you need one of these
++ * at the start of your actual filter struct.
++ */
++
++struct ts_filter {
++	struct ts_filter *next;		/* Next in chain. */
++	struct ts_filter_api *api;	/* Operations to use for this object. */
++	int count_coords;
++	int coords[MAX_TS_FILTER_COORDS];
++};
++
++/*
++ * Helper to create a filter chain from an array of API pointers and
++ * array of config ints. Leaves pointers to created filters in arr
++ * array and fills in ->next pointers to create the chain.
++ */
++
++#ifdef CONFIG_TOUCHSCREEN_FILTER
++extern int ts_filter_create_chain(struct platform_device *pdev,
++				  struct ts_filter_api **api, void **config,
++				  struct ts_filter **arr, int count_coords);
++
++/* Helper to destroy a whole chain from the list of filter pointers. */
++
++extern void ts_filter_destroy_chain(struct platform_device *pdev,
++				    struct ts_filter **arr);
++#else
++#define ts_filter_create_chain(pdev, api, config, arr, count_coords) (0)
++#define ts_filter_destroy_chain(pdev, arr) do { } while (0)
++#endif
++
++#endif
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter_linear.c linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_linear.c
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter_linear.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_linear.c	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,173 @@
++/*
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ *
++ * Copyright (C) 2008 by Openmoko, Inc.
++ * Author: Nelson Castillo <arhuaco@freaks-unidos.net>
++ * All rights reserved.
++ *
++ * Linearly scale touchscreen values.
++ *
++ * Expose the TS_FILTER_LINEAR_NCONSTANTS for the linear transformation
++ * using sysfs.
++ *
++ */
++
++#include "ts_filter_linear.h"
++#include <linux/kernel.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++
++
++/* sysfs functions */
++
++
++static ssize_t const_attr_show(struct kobject *kobj,
++			       struct attribute *attr,
++			       char *buf)
++{
++	struct const_attribute *a = to_const_attr(attr);
++
++	return a->show(to_const_obj(kobj), a, buf);
++}
++
++static ssize_t const_attr_store(struct kobject *kobj,
++				struct attribute *attr,
++				const char *buf, size_t len)
++{
++	struct const_attribute *a = to_const_attr(attr);
++
++	return a->store(to_const_obj(kobj), a, buf, len);
++}
++
++static struct sysfs_ops const_sysfs_ops = {
++	.show =		const_attr_show,
++	.store =	const_attr_store,
++};
++
++static void const_release(struct kobject *kobj)
++{
++	kfree(to_const_obj(kobj)->tsfl);
++}
++
++static ssize_t const_show(struct const_obj *obj, struct const_attribute *attr,
++			  char *buf)
++{
++	int who;
++
++	sscanf(attr->attr.name, "%d", &who);
++	return sprintf(buf, "%d\n", obj->tsfl->constants[who]);
++}
++
++static ssize_t const_store(struct const_obj *obj, struct const_attribute *attr,
++			   const char *buf, size_t count)
++{
++	int who;
++
++	sscanf(attr->attr.name, "%d", &who);
++	sscanf(buf, "%d", &obj->tsfl->constants[who]);
++	return count;
++}
++
++/* filter functions */
++
++static struct ts_filter *ts_filter_linear_create(struct platform_device *pdev,
++						 void *conf, int count_coords)
++{
++	struct ts_filter_linear *tsfl;
++	int i;
++	int ret;
++
++	tsfl = kzalloc(sizeof(struct ts_filter_linear), GFP_KERNEL);
++	if (!tsfl)
++		return NULL;
++
++	tsfl->config = (struct ts_filter_linear_configuration *)conf;
++	tsfl->tsf.count_coords = count_coords;
++
++	for (i = 0; i < TS_FILTER_LINEAR_NCONSTANTS; ++i) {
++		tsfl->constants[i] = tsfl->config->constants[i];
++
++		/* sysfs */
++		sprintf(tsfl->attr_names[i], "%d", i);
++		tsfl->kattrs[i].attr.name = tsfl->attr_names[i];
++		tsfl->kattrs[i].attr.mode = 0666;
++		tsfl->kattrs[i].show = const_show;
++		tsfl->kattrs[i].store = const_store;
++		tsfl->attrs[i] = &tsfl->kattrs[i].attr;
++	}
++	tsfl->attrs[i] = NULL;
++
++	tsfl->const_ktype.sysfs_ops = &const_sysfs_ops;
++	tsfl->const_ktype.release = const_release;
++	tsfl->const_ktype.default_attrs = tsfl->attrs;
++	tsfl->c_obj.tsfl = tsfl; /* kernel frees tsfl in const_release */
++
++	ret = kobject_init_and_add(&tsfl->c_obj.kobj, &tsfl->const_ktype,
++				   &pdev->dev.kobj, "calibration");
++	if (ret) {
++		kobject_put(&tsfl->c_obj.kobj);
++		return NULL;
++	}
++
++	printk(KERN_INFO"  Created Linear ts filter depth %d\n", count_coords);
++
++	return &tsfl->tsf;
++}
++
++static void ts_filter_linear_destroy(struct platform_device *pdev,
++				     struct ts_filter *tsf)
++{
++	struct ts_filter_linear *tsfl = (struct ts_filter_linear *)tsf;
++
++	/* kernel frees tsfl in const_release */
++	kobject_put(&tsfl->c_obj.kobj);
++}
++
++static void ts_filter_linear_clear(struct ts_filter *tsf)
++{
++	if (tsf->next) /* chain */
++		(tsf->next->api->clear)(tsf->next);
++}
++
++
++static void ts_filter_linear_scale(struct ts_filter *tsf, int *coords)
++{
++	struct ts_filter_linear *tsfl = (struct ts_filter_linear *)tsf;
++	int *k = tsfl->constants;
++	int c0 = coords[tsfl->config->coord0];
++	int c1 = coords[tsfl->config->coord1];
++
++	coords[tsfl->config->coord0] = (k[2] + k[0] * c0 + k[1] * c1) / k[6];
++	coords[tsfl->config->coord1] = (k[5] + k[3] * c0 + k[4] * c1) / k[6];
++
++	if (tsf->next)
++		(tsf->next->api->scale)(tsf->next, coords);
++}
++
++static int ts_filter_linear_process(struct ts_filter *tsf, int *coords)
++{
++	if (tsf->next)
++		return (tsf->next->api->process)(tsf->next, coords);
++
++	return 1;
++}
++
++struct ts_filter_api ts_filter_linear_api = {
++	.create = ts_filter_linear_create,
++	.destroy = ts_filter_linear_destroy,
++	.clear = ts_filter_linear_clear,
++	.process = ts_filter_linear_process,
++	.scale = ts_filter_linear_scale,
++};
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter_linear.h linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_linear.h
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter_linear.h	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_linear.h	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,64 @@
++#ifndef __TS_FILTER_LINEAR_H__
++#define __TS_FILTER_LINEAR_H__
++
++#include "ts_filter.h"
++#include <linux/kobject.h>
++
++/*
++ * Touchscreen linear filter.
++ *
++ * Copyright (C) 2008 by Openmoko, Inc.
++ * Author: Nelson Castillo <arhuaco@freaks-unidos.net>
++ *
++ */
++
++#define TS_FILTER_LINEAR_NCONSTANTS 7
++
++/* sysfs */
++
++struct ts_filter_linear;
++
++struct const_obj {
++	struct ts_filter_linear *tsfl;
++	struct kobject kobj;
++};
++
++#define to_const_obj(x) container_of(x, struct const_obj, kobj)
++
++struct const_attribute {
++	struct attribute attr;
++	ssize_t (*show)(struct const_obj *const, struct const_attribute *attr,
++			char *buf);
++	ssize_t (*store)(struct const_obj *const, struct const_attribute *attr,
++			 const char *buf, size_t count);
++};
++
++#define to_const_attr(x) container_of(x, struct const_attribute, attr)
++
++/* filter configuration */
++
++struct ts_filter_linear_configuration {
++	int constants[TS_FILTER_LINEAR_NCONSTANTS];
++	int coord0;
++	int coord1;
++};
++
++/* the filter */
++
++struct ts_filter_linear {
++	struct ts_filter tsf;
++	struct ts_filter_linear_configuration *config;
++
++	int constants[TS_FILTER_LINEAR_NCONSTANTS];
++
++	/* sysfs */
++	struct const_obj c_obj;
++	struct kobj_type const_ktype;
++	struct const_attribute kattrs[TS_FILTER_LINEAR_NCONSTANTS];
++	struct attribute *attrs[TS_FILTER_LINEAR_NCONSTANTS + 1];
++	char attr_names[TS_FILTER_LINEAR_NCONSTANTS][2];
++};
++
++extern struct ts_filter_api ts_filter_linear_api;
++
++#endif
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter_mean.c linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_mean.c
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter_mean.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_mean.c	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,174 @@
++/*
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ *
++ * Copyright (c) 2008 Andy Green <andy@openmoko.com>
++ *
++ *
++ * Mean has no effect if the samples are changing by more that the
++ * threshold set by averaging_threshold in the configuration.
++ *
++ * However while samples come in that don't go outside this threshold from
++ * the last reported sample, Mean replaces the samples with a simple mean
++ * of a configurable number of samples (set by bits_filter_length in config,
++ * which is 2^n, so 5 there makes 32 sample averaging).
++ *
++ * Mean works well if the input data is already good quality, reducing + / - 1
++ * sample jitter when the stylus is still, or moving very slowly, without
++ * introducing abrupt transitions or reducing ability to follow larger
++ * movements.  If you set the threshold higher than the dynamic range of the
++ * coordinates, you can just use it as a simple mean average.
++ */
++
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/slab.h>
++#include "ts_filter_mean.h"
++
++static void ts_filter_mean_clear_internal(struct ts_filter *tsf)
++{
++	struct ts_filter_mean *tsfs = (struct ts_filter_mean *)tsf;
++	int n;
++
++	for (n = 0; n < tsfs->tsf.count_coords; n++) {
++		tsfs->fhead[n] = 0;
++		tsfs->ftail[n] = 0;
++		tsfs->lowpass[n] = 0;
++	}
++}
++
++static void ts_filter_mean_clear(struct ts_filter *tsf)
++{
++	ts_filter_mean_clear_internal(tsf);
++
++	if (tsf->next) /* chain */
++		(tsf->next->api->clear)(tsf->next);
++}
++
++static struct ts_filter *ts_filter_mean_create(struct platform_device *pdev,
++					       void *config, int count_coords)
++{
++	int *p;
++	int n;
++	struct ts_filter_mean *tsfs = kzalloc(
++				  sizeof(struct ts_filter_mean), GFP_KERNEL);
++
++	if (!tsfs)
++		return NULL;
++
++	BUG_ON((count_coords < 1) || (count_coords > MAX_TS_FILTER_COORDS));
++	tsfs->tsf.count_coords = count_coords;
++
++	tsfs->config = (struct ts_filter_mean_configuration *)config;
++
++	tsfs->config->extent = 1 << tsfs->config->bits_filter_length;
++	BUG_ON((tsfs->config->extent > 256) || (!tsfs->config->extent));
++
++	p = kmalloc(tsfs->config->extent * sizeof(int) * count_coords,
++								    GFP_KERNEL);
++	if (!p)
++		return NULL;
++
++	for (n = 0; n < count_coords; n++) {
++		tsfs->fifo[n] = p;
++		p += tsfs->config->extent;
++	}
++
++	if (!tsfs->config->averaging_threshold)
++		tsfs->config->averaging_threshold = 0xffff; /* always active */
++
++	ts_filter_mean_clear_internal(&tsfs->tsf);
++
++	printk(KERN_INFO"  Created Mean ts filter len %d depth %d thresh %d\n",
++	       tsfs->config->extent, count_coords,
++	       tsfs->config->averaging_threshold);
++
++	return &tsfs->tsf;
++}
++
++static void ts_filter_mean_destroy(struct platform_device *pdev,
++				   struct ts_filter *tsf)
++{
++	struct ts_filter_mean *tsfs = (struct ts_filter_mean *)tsf;
++
++	kfree(tsfs->fifo[0]); /* first guy has pointer from kmalloc */
++	kfree(tsf);
++}
++
++static void ts_filter_mean_scale(struct ts_filter *tsf, int *coords)
++{
++	if (tsf->next) /* chain */
++		(tsf->next->api->scale)(tsf->next, coords);
++}
++
++/*
++ * Give us the raw sample data in x and y, and if we return 1 then you can
++ * get a filtered coordinate from tsm->x and tsm->y. If we return 0 you didn't
++ * fill the filter with samples yet.
++ */
++
++static int ts_filter_mean_process(struct ts_filter *tsf, int *coords)
++{
++	struct ts_filter_mean *tsfs = (struct ts_filter_mean *)tsf;
++	int n;
++	int len;
++
++	for (n = 0; n < tsf->count_coords; n++) {
++
++		/*
++		 * Has he moved far enough away that we should abandon current
++		 * low pass filtering state?
++		 */
++		if ((coords[n] < (tsfs->reported[n] -
++					  tsfs->config->averaging_threshold)) ||
++		    (coords[n] > (tsfs->reported[n] +
++					  tsfs->config->averaging_threshold))) {
++			tsfs->fhead[n] = 0;
++			tsfs->ftail[n] = 0;
++			tsfs->lowpass[n] = 0;
++		}
++
++		/* capture this sample into fifo and sum */
++		tsfs->fifo[n][tsfs->fhead[n]++] = coords[n];
++		if (tsfs->fhead[n] == tsfs->config->extent)
++			tsfs->fhead[n] = 0;
++		tsfs->lowpass[n] += coords[n];
++
++		/* adjust the sum into an average and use that*/
++		len = (tsfs->fhead[n] - tsfs->ftail[n]) &
++						     (tsfs->config->extent - 1);
++		coords[n] = (tsfs->lowpass[n] + (len >> 1)) / len;
++		tsfs->reported[n] = coords[n];
++
++		/* remove oldest sample if we are full */
++		if (len == (tsfs->config->extent - 1)) {
++			tsfs->lowpass[n] -= tsfs->fifo[n][tsfs->ftail[n]++];
++			if (tsfs->ftail[n] == tsfs->config->extent)
++				tsfs->ftail[n] = 0;
++		}
++	}
++
++	if (tsf->next) /* chain */
++		return (tsf->next->api->process)(tsf->next, coords);
++
++	return 1;
++}
++
++struct ts_filter_api ts_filter_mean_api = {
++	.create = ts_filter_mean_create,
++	.destroy = ts_filter_mean_destroy,
++	.clear = ts_filter_mean_clear,
++	.process = ts_filter_mean_process,
++	.scale = ts_filter_mean_scale,
++};
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter_mean.h linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_mean.h
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter_mean.h	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_mean.h	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,34 @@
++#ifndef __TS_FILTER_MEAN_H__
++#define __TS_FILTER_MEAN_H__
++
++#include "ts_filter.h"
++
++/*
++ * Touchscreen filter.
++ *
++ * mean
++ *
++ * (c) 2008 Andy Green <andy@openmoko.com>
++ */
++
++struct ts_filter_mean_configuration {
++	int bits_filter_length;
++	int averaging_threshold;
++
++	int extent;
++};
++
++struct ts_filter_mean {
++	struct ts_filter tsf;
++	struct ts_filter_mean_configuration *config;
++
++	int reported[MAX_TS_FILTER_COORDS];
++	int lowpass[MAX_TS_FILTER_COORDS];
++	int *fifo[MAX_TS_FILTER_COORDS];
++	int fhead[MAX_TS_FILTER_COORDS];
++	int ftail[MAX_TS_FILTER_COORDS];
++};
++
++extern struct ts_filter_api ts_filter_mean_api;
++
++#endif
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter_median.c linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_median.c
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter_median.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_median.c	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,217 @@
++/*
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ *
++ * Copyright (c) 2008 Andy Green <andy@openmoko.com>
++ *
++ *
++ * Median averaging stuff.  We sort incoming raw samples into an array of
++ * MEDIAN_SIZE length, discarding the oldest sample each time once we are full.
++ * We then return the sum of the middle three samples for X and Y.  It means
++ * the final result must be divided by (3 * scaling factor) to correct for
++ * avoiding the repeated /3.
++ *
++ * This strongly rejects brief excursions away from a central point that is
++ * sticky in time compared to the excursion duration.
++ *
++ * Thanks to Dale Schumacher (who wrote some example code) and Carl-Daniel
++ * Halifinger who pointed out this would be a good method.
++ */
++
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/slab.h>
++#include "ts_filter_median.h"
++
++static void ts_filter_median_insert(int *p, int sample, int count)
++{
++	int n;
++
++	/* search through what we got so far to find where to put sample */
++	for (n = 0; n < count; n++)
++		 /* we met somebody bigger than us? */
++		if (sample < p[n]) {
++			/* starting from the end, push bigger guys down one */
++			for (count--; count >= n; count--)
++				p[count + 1] = p[count];
++			p[n] = sample; /* and put us in place of first bigger */
++			return;
++		}
++
++	p[count] = sample; /* nobody was bigger than us, add us on the end */
++}
++
++static void ts_filter_median_del(int *p, int value, int count)
++{
++	int index;
++
++	for (index = 0; index < count; index++)
++		if (p[index] == value) {
++			for (; index < count; index++)
++				p[index] = p[index + 1];
++			return;
++		}
++}
++
++
++static void ts_filter_median_clear_internal(struct ts_filter *tsf)
++{
++	struct ts_filter_median *tsfm = (struct ts_filter_median *)tsf;
++
++	tsfm->pos = 0;
++	tsfm->valid = 0;
++
++}
++static void ts_filter_median_clear(struct ts_filter *tsf)
++{
++	ts_filter_median_clear_internal(tsf);
++
++	if (tsf->next) /* chain */
++		(tsf->next->api->clear)(tsf->next);
++}
++
++static struct ts_filter *ts_filter_median_create(struct platform_device *pdev,
++						 void *conf, int count_coords)
++{
++	int *p;
++	int n;
++	struct ts_filter_median *tsfm = kzalloc(sizeof(struct ts_filter_median),
++								    GFP_KERNEL);
++
++	if (!tsfm)
++		return NULL;
++
++	tsfm->config = (struct ts_filter_median_configuration *)conf;
++	BUG_ON((count_coords < 1) || (count_coords > MAX_TS_FILTER_COORDS));
++	tsfm->tsf.count_coords = count_coords;
++
++	tsfm->config->midpoint = (tsfm->config->extent >> 1) + 1;
++
++	p = kmalloc(2 * count_coords * sizeof(int) * (tsfm->config->extent + 1),
++								    GFP_KERNEL);
++	if (!p) {
++		kfree(tsfm);
++		return NULL;
++	}
++
++	for (n = 0; n < count_coords; n++) {
++		tsfm->sort[n] = p;
++		p += tsfm->config->extent + 1;
++		tsfm->fifo[n] = p;
++		p += tsfm->config->extent + 1;
++	}
++
++	ts_filter_median_clear_internal(&tsfm->tsf);
++
++	printk(KERN_INFO"  Created Median ts filter len %d depth %d dec %d\n",
++	       tsfm->config->extent, count_coords,
++	       tsfm->config->decimation_threshold);
++
++	return &tsfm->tsf;
++}
++
++static void ts_filter_median_destroy(struct platform_device *pdev,
++				     struct ts_filter *tsf)
++{
++	struct ts_filter_median *tsfm = (struct ts_filter_median *)tsf;
++
++	kfree(tsfm->sort[0]); /* first guy has pointer from kmalloc */
++	kfree(tsf);
++}
++
++static void ts_filter_median_scale(struct ts_filter *tsf, int *coords)
++{
++	int n;
++
++	for (n = 0; n < tsf->count_coords; n++)
++		coords[n] = (coords[n] + 2) / 3;
++
++	if (tsf->next) /* chain */
++		(tsf->next->api->scale)(tsf->next, coords);
++}
++
++/*
++ * Give us the raw sample data coords, and if we return 1 then you can
++ * get a filtered coordinate from coords. If we return 0 you didn't
++ * fill all the filters with samples yet.
++ */
++
++static int ts_filter_median_process(struct ts_filter *tsf, int *coords)
++{
++	struct ts_filter_median *tsfm = (struct ts_filter_median *)tsf;
++	int n;
++	int movement = 1;
++
++	for (n = 0; n < tsf->count_coords; n++) {
++		/* grab copy in insertion order to remove when oldest */
++		tsfm->fifo[n][tsfm->pos] = coords[n];
++		/* insert these samples in sorted order in the median arrays */
++		ts_filter_median_insert(tsfm->sort[n], coords[n], tsfm->valid);
++	}
++	/* move us on in the fifo */
++	if (++tsfm->pos == (tsfm->config->extent + 1))
++		tsfm->pos = 0;
++
++	/* we have finished a median sampling? */
++	if (++tsfm->valid != tsfm->config->extent)
++		return 0; /* no valid sample to use */
++
++	/* discard the oldest sample in median sorted array */
++	tsfm->valid--;
++
++	/*
++	 * Sum the middle 3 in the median sorted arrays. We don't divide back
++	 * down which increases the sum resolution by a factor of 3 until the
++	 * scale API is called.
++	 */
++	for (n = 0; n < tsfm->tsf.count_coords; n++)
++		/* perform the deletion of the oldest sample */
++		ts_filter_median_del(tsfm->sort[n], tsfm->fifo[n][tsfm->pos],
++								   tsfm->valid);
++
++	tsfm->decimation_count--;
++	if (tsfm->decimation_count >= 0)
++		return 0;
++
++	for (n = 0; n < tsfm->tsf.count_coords; n++) {
++		/* give the coordinate result from summing median 3 */
++		coords[n] = tsfm->sort[n][tsfm->config->midpoint - 1] +
++			    tsfm->sort[n][tsfm->config->midpoint] +
++			    tsfm->sort[n][tsfm->config->midpoint + 1]
++			;
++
++		movement += abs(tsfm->last_issued[n] - coords[n]);
++	}
++
++	if (movement > tsfm->config->decimation_threshold) /* fast */
++		tsfm->decimation_count = tsfm->config->decimation_above;
++	else
++		tsfm->decimation_count = tsfm->config->decimation_below;
++
++	memcpy(&tsfm->last_issued[0], coords,
++	       tsfm->tsf.count_coords * sizeof(int));
++
++	if (tsf->next) /* chain */
++		return (tsf->next->api->process)(tsf->next, coords);
++
++	return 1;
++}
++
++struct ts_filter_api ts_filter_median_api = {
++	.create = ts_filter_median_create,
++	.destroy = ts_filter_median_destroy,
++	.clear = ts_filter_median_clear,
++	.process = ts_filter_median_process,
++	.scale = ts_filter_median_scale,
++};
+diff -urN linux-2.6.29/drivers/input/touchscreen/ts_filter_median.h linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_median.h
+--- linux-2.6.29/drivers/input/touchscreen/ts_filter_median.h	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/input/touchscreen/ts_filter_median.h	2009-03-24 21:27:53.000000000 +0300
+@@ -0,0 +1,36 @@
++#ifndef __TS_FILTER_MEDIAN_H__
++#define __TS_FILTER_MEDIAN_H__
++
++#include "ts_filter.h"
++
++/*
++ * Touchscreen filter.
++ *
++ * median
++ *
++ * (c) 2008 Andy Green <andy@openmoko.com>
++ */
++
++struct ts_filter_median_configuration {
++	int extent;
++	int midpoint;
++	int decimation_threshold;
++	int decimation_above;
++	int decimation_below;
++};
++
++struct ts_filter_median {
++	struct ts_filter tsf;
++	struct ts_filter_median_configuration *config;
++
++	int decimation_count;
++	int last_issued[MAX_TS_FILTER_COORDS];
++	int valid; /* how many samples in the sort buffer are valid */
++	int *sort[MAX_TS_FILTER_COORDS]; /* samples taken for median */
++	int *fifo[MAX_TS_FILTER_COORDS]; /* samples taken for median */
++	int pos; /* where we are in the fifo sample memory */
++};
++
++extern struct ts_filter_api ts_filter_median_api;
++
++#endif
+diff -urN linux-2.6.29/drivers/usb/gadget/s3c2410_udc.c linux-2.6.29.n311/drivers/usb/gadget/s3c2410_udc.c
+--- linux-2.6.29/drivers/usb/gadget/s3c2410_udc.c	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/drivers/usb/gadget/s3c2410_udc.c	2009-03-25 00:18:06.000000000 +0300
+@@ -843,6 +843,7 @@
+ 	u32			ep_csr1;
+ 	u32			idx;
+ 
++handle_ep_again:
+ 	if (likely (!list_empty(&ep->queue)))
+ 		req = list_entry(ep->queue.next,
+ 				struct s3c2410_request, queue);
+@@ -882,6 +883,8 @@
+ 
+ 		if ((ep_csr1 & S3C2410_UDC_OCSR1_PKTRDY) && req) {
+ 			s3c2410_udc_read_fifo(ep,req);
++			if (s3c2410_udc_fifo_count_out())
++				goto handle_ep_again;
+ 		}
+ 	}
+ }
+diff -urN linux-2.6.29/drivers/usb/host/ohci-s3c2410.c linux-2.6.29.n311/drivers/usb/host/ohci-s3c2410.c
+--- linux-2.6.29/drivers/usb/host/ohci-s3c2410.c	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/drivers/usb/host/ohci-s3c2410.c	2009-03-25 00:18:08.000000000 +0300
+@@ -24,6 +24,7 @@
+ 
+ #include <mach/hardware.h>
+ #include <mach/usb-control.h>
++#include <mach/regs-gpio.h>
+ 
+ #define valid_port(idx) ((idx) == 1 || (idx) == 2)
+ 
+@@ -308,6 +309,40 @@
+ 	local_irq_restore(flags);
+ }
+ 
++/* switching of USB pads */
++static ssize_t show_usb_mode(struct device *dev, struct device_attribute *attr,
++			     char *buf)
++{
++	if (__raw_readl(S3C24XX_MISCCR) & S3C2410_MISCCR_USBHOST)
++		return sprintf(buf, "host\n");
++
++	return sprintf(buf, "device\n");
++}
++
++static ssize_t set_usb_mode(struct device *dev, struct device_attribute *attr,
++			    const char *buf, size_t count)
++{
++	if (!strncmp(buf, "host", 4)) {
++		printk("s3c2410: changing usb to host\n");
++		s3c2410_modify_misccr(S3C2410_MISCCR_USBHOST,
++				      S3C2410_MISCCR_USBHOST);
++		/* FIXME:
++		 * - call machine-specific disable-pullup function i
++		 * - enable +Vbus (if hardware supports it)
++		 */
++		s3c2410_gpio_setpin(S3C2410_GPB9, 0);
++	} else if (!strncmp(buf, "device", 6)) {
++		printk("s3c2410: changing usb to device\n");
++		s3c2410_modify_misccr(S3C2410_MISCCR_USBHOST, 0);
++		s3c2410_gpio_setpin(S3C2410_GPB9, 1);
++	} else
++		printk("s3c2410: unknown mode\n");
++		return -EINVAL;
++	return count;
++}
++
++static DEVICE_ATTR(usb_mode, S_IRUGO | S_IWUSR, show_usb_mode, set_usb_mode);
++
+ /* may be called without controller electrically present */
+ /* may be called with controller, bus, and devices active */
+ 
+@@ -325,6 +360,7 @@
+ static void
+ usb_hcd_s3c2410_remove (struct usb_hcd *hcd, struct platform_device *dev)
+ {
++	device_remove_file(&dev->dev, &dev_attr_usb_mode);
+ 	usb_remove_hcd(hcd);
+ 	s3c2410_stop_hc(dev);
+ 	iounmap(hcd->regs);
+@@ -392,8 +428,15 @@
+ 	if (retval != 0)
+ 		goto err_ioremap;
+ 
++	retval = device_create_file(&dev->dev, &dev_attr_usb_mode);
++	if (retval != 0)
++		goto err_hcd;
++
+ 	return 0;
+ 
++ err_hcd:
++	usb_remove_hcd(hcd);
++
+  err_ioremap:
+ 	s3c2410_stop_hc(dev);
+ 	iounmap(hcd->regs);
+diff -urN linux-2.6.29/drivers/video/Kconfig linux-2.6.29.n311/drivers/video/Kconfig
+--- linux-2.6.29/drivers/video/Kconfig	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/drivers/video/Kconfig	2009-03-24 20:19:15.000000000 +0300
+@@ -1936,6 +1936,19 @@
+ 	  say M here and read <file:Documentation/kbuild/modules.txt>.
+ 
+ 	  If unsure, say N.
++
++config FB_N311
++	tristate "Acer N311 LCD framebuffer support"
++	depends on FB && ARCH_S3C2410 && MACH_N311
++	select FB_CFB_FILLRECT
++	select FB_CFB_COPYAREA
++	select FB_CFB_IMAGEBLIT
++	---help---
++	  Frame buffer driver for the built-in LCD controller in the Acer 
++	  N311 PDA.
++
++	  If unsure, say N.
++
+ config FB_S3C2410_DEBUG
+ 	bool "S3C2410 lcd debug messages"
+ 	depends on FB_S3C2410
+diff -urN linux-2.6.29/drivers/video/Makefile linux-2.6.29.n311/drivers/video/Makefile
+--- linux-2.6.29/drivers/video/Makefile	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/drivers/video/Makefile	2009-03-24 20:21:27.000000000 +0300
+@@ -110,6 +110,7 @@
+ obj-$(CONFIG_FB_SH7760)		  += sh7760fb.o
+ obj-$(CONFIG_FB_IMX)              += imxfb.o
+ obj-$(CONFIG_FB_S3C2410)	  += s3c2410fb.o
++obj-$(CONFIG_FB_N311)	          += n311fb.o
+ obj-$(CONFIG_FB_FSL_DIU)	  += fsl-diu-fb.o
+ obj-$(CONFIG_FB_COBALT)           += cobalt_lcdfb.o
+ obj-$(CONFIG_FB_PNX4008_DUM)	  += pnx4008/
+diff -urN linux-2.6.29/drivers/video/n311fb.c linux-2.6.29.n311/drivers/video/n311fb.c
+--- linux-2.6.29/drivers/video/n311fb.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/drivers/video/n311fb.c	2009-03-24 20:15:41.000000000 +0300
+@@ -0,0 +1,410 @@
++/*linux/drivers/video/n311fb.c -- Acer N311 Simple Frame Buffer device
++ *
++ *      Copyright (C) 2008 Vladimir Chernichkin
++ *
++ *      Based on Virtual Frame Buffer device
++ *
++ *      Copyright (C) 2002 James Simmons
++ *
++ *      Copyright (C) 1997 Geert Uytterhoeven
++ *
++ *  This file is subject to the terms and conditions of the GNU General Public
++ *  License. See the file COPYING in the main directory of this archive for
++ *  more details.
++ */
++
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/errno.h>
++#include <linux/string.h>
++#include <linux/mm.h>
++#include <linux/slab.h>
++#include <linux/vmalloc.h>
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++#include <linux/platform_device.h>
++#include <linux/fb.h>
++#include <linux/init.h>
++#include <asm/io.h>
++
++    /*
++     *  RAM we reserve for the frame buffer. This defines the maximum screen
++     *  size
++     *
++     *  The default can be overridden if the driver is compiled as a module
++     */
++
++#define VIDEOMEMSIZE	(2*480*640)	/* 600 KB */
++#define VIDEOMEMSTART 0x20020000	/* Obtained with HaRET*/
++static void *videomemory;
++static u_long videomemorysize = VIDEOMEMSIZE;
++module_param(videomemorysize, ulong, 0);
++
++
++static struct fb_var_screeninfo n311fb_default __initdata = {
++	
++	.xres =		480,
++	.yres =		640,
++	.xres_virtual =	480,
++	.yres_virtual =	640,
++	.bits_per_pixel	= 16,
++	.red =		{ 11, 5, 0 },
++      	.green =	{ 5, 6, 0 },
++      	.blue =		{ 0, 5, 0 },
++	.height		= -1,
++	.width		= -1,
++	.accel_flags	= FB_ACCEL_NONE,
++	.pixclock	= 60000,
++	.left_margin	= 0,
++	.right_margin	= 0,
++	.upper_margin	= 0,
++	.lower_margin	= 0,
++	.hsync_len	= 0,
++	.vsync_len	= 0,
++	.vmode		= FB_VMODE_NONINTERLACED|FB_VMODE_YWRAP|FB_VMODE_CONUPDATE , 
++};
++
++static struct fb_fix_screeninfo n311fb_fix __initdata = {
++	.id =		"N311 FB",
++	.type =		FB_TYPE_PACKED_PIXELS,
++	.visual =	FB_VISUAL_TRUECOLOR,
++	.xpanstep =	0,
++	.ypanstep = 	0,
++	.ywrapstep = 	0,
++	.line_length =	960,
++	.accel =	FB_ACCEL_NONE,
++	.smem_start =	VIDEOMEMSTART,
++	.smem_len = 	VIDEOMEMSIZE,
++};
++
++struct fb_videomode n311mode_default __initdata = {
++       
++	.xres=480,
++	.yres=640,
++	.pixclock=60000,
++	.left_margin=0,
++	.right_margin=0,
++	.upper_margin=0,
++	.lower_margin=0,
++	.hsync_len=0,
++	.vsync_len=0,
++	.sync=0,
++	.vmode=0,
++};
++
++
++static int n311fb_enable __initdata = 1;
++module_param(n311fb_enable, bool, 0);
++
++static int n311fb_check_var(struct fb_var_screeninfo *var,
++			 struct fb_info *info);
++static int n311fb_set_par(struct fb_info *info);
++static int n311fb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
++			 u_int transp, struct fb_info *info);
++
++static struct fb_ops n311fb_ops = {
++	
++	.fb_check_var	= n311fb_check_var,
++	.fb_set_par	= n311fb_set_par,
++	.fb_setcolreg	= n311fb_setcolreg,
++	.fb_fillrect	= cfb_fillrect,
++	.fb_copyarea	= cfb_copyarea,
++	.fb_imageblit	= cfb_imageblit,
++};
++
++    /*
++     *  Internal routines
++     */
++
++static u_long get_line_length(int xres_virtual, int bpp)
++{
++	u_long length;
++
++	length = xres_virtual * bpp;
++	length = (length + 31) & ~31;
++	length >>= 3;
++	return (length);
++}
++
++    /*
++     *  Setting the video mode has been split into two parts.
++     *  First part, xxxfb_check_var, must not write anything
++     *  to hardware, it should only verify and adjust var.
++     *  This means it doesn't alter par but it does use hardware
++     *  data from it to check this var. 
++     */
++
++static int n311fb_check_var(struct fb_var_screeninfo *var,
++			 struct fb_info *info)
++{
++	//int memlen, vramlen;
++	//int pitch, err = 0;
++	printk("\nn311fb: entered n311fb_check_var with xres_virtual %d,yres_virtual %d, %dbpp\n",
++				       var->xres_virtual,
++				       var->yres_virtual, var->bits_per_pixel);
++	var->transp.offset = 0;
++	var->transp.length = 0;
++	info->var.xres=480;
++	info->var.yres=640;
++	info->var.bits_per_pixel = 16;
++	info->var.height = -1;
++	info->var.width	= -1;
++	info->var.accel_flags = FB_ACCEL_NONE;
++	info->var.pixclock=60000;
++	info->var.left_margin=0;
++	info->var.right_margin=0;
++	info->var.upper_margin=0;
++	info->var.lower_margin=0;
++	info->var.hsync_len=0;
++	info->var.vsync_len=0;
++	info->var.sync=0;
++	info->var.vmode=0;
++	return 0;
++}
++
++/* This routine actually sets the video mode. It's in here where we
++ * the hardware state info->par and fix which can be affected by the 
++ * change in par. For this driver it doesn't do much. 
++ */
++static int n311fb_set_par(struct fb_info *info)
++{
++	printk("\nn311fb: entered n311fb_set_par with xres_virtual %d,yres_virtual %d, %dbpp\n",
++				       info->var.xres_virtual,
++				       info->var.yres_virtual, info->var.bits_per_pixel);
++	info->fix.line_length = get_line_length(info->var.xres_virtual,	info->var.bits_per_pixel);
++	return 0;
++}
++
++    /*
++     *  Set a single color register. The values supplied are already
++     *  rounded down to the hardware's capabilities (according to the
++     *  entries in the var structure). Return != 0 for invalid regno.
++     */
++
++static int n311fb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
++			 u_int transp, struct fb_info *info)
++{
++	if (regno >= 256) /* no. of hw registers */
++		return 1;
++	/*
++	 * Program hardware... do anything you want with transp
++	 */
++
++	/* grayscale works only partially under directcolor */
++	/* grayscale = 0.30*R + 0.59*G + 0.11*B */
++	if (info->var.grayscale) {red = green = blue =(red * 77 + green * 151 + blue * 28) >> 8;}
++
++	/* Directcolor:
++	 *   var->{color}.offset contains start of bitfield
++	 *   var->{color}.length contains length of bitfield
++	 *   {hardwarespecific} contains width of RAMDAC
++	 *   cmap[X] is programmed to (X << red.offset) | (X << green.offset) | (X << blue.offset)
++	 *   RAMDAC[X] is programmed to (red, green, blue)
++	 * 
++	 * Pseudocolor:
++	 *    uses offset = 0 && length = RAMDAC register width.
++	 *    var->{color}.offset is 0
++	 *    var->{color}.length contains widht of DAC
++	 *    cmap is not used
++	 *    RAMDAC[X] is programmed to (red, green, blue)
++	 * Truecolor:
++	 *    does not use DAC. Usually 3 are present.
++	 *    var->{color}.offset contains start of bitfield
++	 *    var->{color}.length contains length of bitfield
++	 *    cmap is programmed to (red << red.offset) | (green << green.offset) |
++	 *                      (blue << blue.offset) | (transp << transp.offset)
++	 *    RAMDAC does not exist
++	 */
++#define CNVT_TOHW(val,width) ((((val)<<(width))+0x7FFF-(val))>>16)
++	switch (info->fix.visual) {
++	case FB_VISUAL_TRUECOLOR:
++	case FB_VISUAL_PSEUDOCOLOR:
++		red = CNVT_TOHW(red, info->var.red.length);
++		green = CNVT_TOHW(green, info->var.green.length);
++		blue = CNVT_TOHW(blue, info->var.blue.length);
++		transp = CNVT_TOHW(transp, info->var.transp.length);
++		break;
++	case FB_VISUAL_DIRECTCOLOR:
++		red = CNVT_TOHW(red, 8);	/* expect 8 bit DAC */
++		green = CNVT_TOHW(green, 8);
++		blue = CNVT_TOHW(blue, 8);
++		/* hey, there is bug in transp handling... */
++		transp = CNVT_TOHW(transp, 8);
++		break;
++	}
++#undef CNVT_TOHW
++	/* Truecolor has hardware independent palette */
++	if (info->fix.visual == FB_VISUAL_TRUECOLOR) {
++		u32 v;
++		
++		if (regno >= 16)
++			return 1;
++
++		v = (red << info->var.red.offset) |
++		    (green << info->var.green.offset) |
++		    (blue << info->var.blue.offset) |
++		    (transp << info->var.transp.offset);
++		
++		switch (info->var.bits_per_pixel) {
++		case 8:
++			break;
++		case 16:
++			((u32 *) (info->pseudo_palette))[regno] = v;
++			break;
++		case 24:
++		case 32:
++			((u32 *) (info->pseudo_palette))[regno] = v;
++			break;
++		}
++		return 0;
++	}
++	return 0;
++}
++
++
++
++#ifndef MODULE
++static int __init n311fb_setup(char *options)
++{
++	char *this_opt;
++
++	n311fb_enable = 1;
++
++	if (!options || !*options)
++		return 1;
++
++	while ((this_opt = strsep(&options, ",")) != NULL) {
++		if (!*this_opt)
++			continue;
++		if (!strncmp(this_opt, "disable", 7))
++			n311fb_enable = 0;
++	}
++	return 1;
++}
++#endif  /*  MODULE  */
++
++    /*
++     *  Initialisation
++     */
++
++static int __init n311fb_probe(struct platform_device *dev)
++{
++	struct fb_info *info;
++	int retval = -ENOMEM;
++	
++	info = framebuffer_alloc(sizeof(u32) * 256, &dev->dev);
++	if (!info)
++		goto err;
++
++	if (!request_mem_region(VIDEOMEMSTART, videomemorysize,	"n311fb")) {
++		printk(KERN_INFO"n311fb: cannot get framebuffer\n");
++		goto err2;
++	}
++	
++
++
++	info->screen_base = ioremap(VIDEOMEMSTART,videomemorysize);
++	
++	info->fbops = &n311fb_ops;
++	info->var = n311fb_default;
++		
++	info->fix = n311fb_fix;
++	info->pseudo_palette = info->par;
++	info->par = NULL;
++	info->flags = FBINFO_MISC_ALWAYS_SETPAR|FBINFO_READS_FAST|FBINFO_HWACCEL_NONE|FBINFO_FLAG_DEFAULT;
++	info->mode=&n311mode_default;
++	retval = fb_alloc_cmap(&info->cmap, 256, 0);
++	if (retval < 0)
++		goto err1;
++
++	retval = register_framebuffer(info);
++	if (retval < 0)
++		goto err2;
++	platform_set_drvdata(dev, info);
++
++	printk(KERN_INFO
++	       "fb%d: n311 frame buffer device, using %ldK of video memory\n",
++	       info->node, videomemorysize >> 10);
++
++
++	return 0;
++err2:
++	fb_dealloc_cmap(&info->cmap);
++err1:
++	framebuffer_release(info); 
++	release_mem_region(VIDEOMEMSTART, videomemorysize);
++err:
++	iounmap(videomemory);
++	return retval;
++}
++
++static int n311fb_remove(struct platform_device *dev)
++{
++	struct fb_info *info = platform_get_drvdata(dev);
++
++	if (info) {
++		unregister_framebuffer(info);
++		iounmap(videomemory);
++		release_mem_region(VIDEOMEMSTART, videomemorysize);
++		framebuffer_release(info);
++	}
++	return 0;
++}
++
++static struct platform_driver n311fb_driver = {
++	.probe	= n311fb_probe,
++	.remove = n311fb_remove,
++	.driver = {
++		.name	= "n311fb",
++	},
++};
++
++static struct platform_device *n311fb_device;
++
++static int __init n311fb_init(void)
++{
++	int ret = 0;
++
++#ifndef MODULE
++	char *option = NULL;
++
++	if (fb_get_options("n311fb", &option))
++		return -ENODEV;
++	n311fb_setup(option);
++#endif
++
++	if (!n311fb_enable)
++		return -ENXIO;
++
++	ret = platform_driver_register(&n311fb_driver);
++
++	if (!ret) {
++		n311fb_device = platform_device_alloc("n311fb", 0);
++
++		if (n311fb_device)
++			ret = platform_device_add(n311fb_device);
++		else
++			ret = -ENOMEM;
++
++		if (ret) {
++			platform_device_put(n311fb_device);
++			platform_driver_unregister(&n311fb_driver);
++		}
++	}
++
++	return ret;
++}
++
++module_init(n311fb_init);
++
++#ifdef MODULE
++static void __exit n311fb_exit(void)
++{
++	platform_device_unregister(n311fb_device);
++	platform_driver_unregister(&n311fb_driver);
++}
++
++module_exit(n311fb_exit);
++
++MODULE_LICENSE("GPL");
++#endif				/* MODULE */
+diff -urN linux-2.6.29/sound/soc/codecs/uda1380.c linux-2.6.29.n311/sound/soc/codecs/uda1380.c
+--- linux-2.6.29/sound/soc/codecs/uda1380.c	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/sound/soc/codecs/uda1380.c	2009-03-25 17:08:22.000000000 +0300
+@@ -24,7 +24,6 @@
+ #include <linux/errno.h>
+ #include <linux/ioctl.h>
+ #include <linux/delay.h>
+-#include <linux/i2c.h>
+ #include <sound/core.h>
+ #include <sound/control.h>
+ #include <sound/initval.h>
+@@ -33,6 +32,12 @@
+ #include <sound/soc-dapm.h>
+ #include <sound/tlv.h>
+ 
++#include <linux/gpio.h>
++#include <mach/regs-clock.h>
++#include <mach/hardware.h>
++#include <mach/regs-gpio.h>
++#include <mach/regs-gpioj.h>
++
+ #include "uda1380.h"
+ 
+ #define UDA1380_VERSION "0.6"
+@@ -51,7 +56,6 @@
+ 	0x0000, 0x0000, 0x0000, 0x0000,
+ 	0x0000, 0x8000, 0x0002, 0x0000,
+ };
+-
+ /*
+  * read uda1380 register cache
+  */
+@@ -77,23 +81,77 @@
+ 		return;
+ 	cache[reg] = value;
+ }
++/* HACK */
++#define MODE S3C2410_GPC13 
++#define DAT S3C2410_GPC14
++#define CLK S3C2410_GPC15
++ 
++#define setdat(val)    gpio_set_value(DAT, val) 
++#define setclk(val)    gpio_set_value(CLK, val) 
++#define setmode(val)    gpio_set_value(MODE, val) 
++//#define setdatin()    s3c2410_gpio_cfgpin(DAT, S3C2410_GPIO_INPUT) 
++#define setdatin()    s3c2410_gpio_cfgpin( DAT,S3C2410_GPC14_INP ) 
++//#define setdatout()    s3c2410_gpio_cfgpin(DAT, S3C2410_GPIO_OUTPUT) 
++#define setdatout()    s3c2410_gpio_cfgpin(DAT, S3C2410_GPC14_OUTP) 
++#define getdat()    s3c2410_gpio_getpin(DAT) 
++ 
++#define DATA_HOLD    1 
++#define DATA_SETUP    1 
++#define CLOCK_HIGH    1 
++#define MODE_SETUP    1 
++#define MODE_HOLD    1 
++
++#define DBG(x...) printk( x )
++static void sendbyte(u8 byte) 
++{ 
++    int i; 
++ 
++    for (i = 0; i < 8; i++) { 
++        setclk(0); 
++        udelay(DATA_HOLD); 
++        setdat((byte & 0x80)>>7);
++        DBG("%d",(byte & 0x80)>>7);	
++        udelay(DATA_SETUP); 
++        setclk(1); 
++        udelay(CLOCK_HIGH); 
++        byte <<= 1; 
++    } 
++    DBG("\n");
++} 
++ 
++void sendaddr(u8 addr) 
++{ 
++    setmode(0); 
++    udelay(MODE_SETUP); 
++    sendbyte(addr); 
++    udelay(MODE_HOLD); 
++    setmode(1); 
++    udelay(MODE_SETUP); 
++} 
++
++void s3c24xx_l3_reg_write(u8 reg, u16 data) 
++{ 
++    setdatout(); 
++    sendaddr(0x60); 
++    sendbyte(reg);
++    sendbyte((data>>8)&0xff);
++    sendbyte(data&0xff);
++ 
++} 
+ 
++/* HACK END */
+ /*
+  * write to the UDA1380 register space
+  */
+ static int uda1380_write(struct snd_soc_codec *codec, unsigned int reg,
+ 	unsigned int value)
+ {
+-	u8 data[3];
++	int ret;
++	u8 addr;
++	u8 data = value;
++	struct uda1380_platform_data *pd = codec->control_data;
+ 
+-	/* data is
+-	 *   data[0] is register offset
+-	 *   data[1] is MS byte
+-	 *   data[2] is LS byte
+-	 */
+-	data[0] = reg;
+-	data[1] = (value & 0xff00) >> 8;
+-	data[2] = value & 0x00ff;
++        pr_debug("%s reg: %02X, value:%02X\n", __func__, reg, value);
+ 
+ 	uda1380_write_reg_cache(codec, reg, value);
+ 
+@@ -103,19 +161,8 @@
+ 	if (!codec->active && (reg >= UDA1380_MVOL))
+ 		return 0;
+ 	pr_debug("uda1380: hw write %x val %x\n", reg, value);
+-	if (codec->hw_write(codec->control_data, data, 3) == 3) {
+-		unsigned int val;
+-		i2c_master_send(codec->control_data, data, 1);
+-		i2c_master_recv(codec->control_data, data, 2);
+-		val = (data[0]<<8) | data[1];
+-		if (val != value) {
+-			pr_debug("uda1380: READ BACK VAL %x\n",
+-					(data[0]<<8) | data[1]);
+-			return -EIO;
+-		}
+-		return 0;
+-	} else
+-		return -EIO;
++
++        s3c24xx_l3_reg_write(reg, value);
+ }
+ 
+ #define uda1380_reset(c)	uda1380_write(c, UDA1380_RESET, 0)
+@@ -695,90 +742,6 @@
+ 
+ static struct snd_soc_device *uda1380_socdev;
+ 
+-#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
+-
+-static int uda1380_i2c_probe(struct i2c_client *i2c,
+-			     const struct i2c_device_id *id)
+-{
+-	struct snd_soc_device *socdev = uda1380_socdev;
+-	struct uda1380_setup_data *setup = socdev->codec_data;
+-	struct snd_soc_codec *codec = socdev->codec;
+-	int ret;
+-
+-	i2c_set_clientdata(i2c, codec);
+-	codec->control_data = i2c;
+-
+-	ret = uda1380_init(socdev, setup->dac_clk);
+-	if (ret < 0)
+-		pr_err("uda1380: failed to initialise UDA1380\n");
+-
+-	return ret;
+-}
+-
+-static int uda1380_i2c_remove(struct i2c_client *client)
+-{
+-	struct snd_soc_codec *codec = i2c_get_clientdata(client);
+-	kfree(codec->reg_cache);
+-	return 0;
+-}
+-
+-static const struct i2c_device_id uda1380_i2c_id[] = {
+-	{ "uda1380", 0 },
+-	{ }
+-};
+-MODULE_DEVICE_TABLE(i2c, uda1380_i2c_id);
+-
+-static struct i2c_driver uda1380_i2c_driver = {
+-	.driver = {
+-		.name =  "UDA1380 I2C Codec",
+-		.owner = THIS_MODULE,
+-	},
+-	.probe =    uda1380_i2c_probe,
+-	.remove =   uda1380_i2c_remove,
+-	.id_table = uda1380_i2c_id,
+-};
+-
+-static int uda1380_add_i2c_device(struct platform_device *pdev,
+-				  const struct uda1380_setup_data *setup)
+-{
+-	struct i2c_board_info info;
+-	struct i2c_adapter *adapter;
+-	struct i2c_client *client;
+-	int ret;
+-
+-	ret = i2c_add_driver(&uda1380_i2c_driver);
+-	if (ret != 0) {
+-		dev_err(&pdev->dev, "can't add i2c driver\n");
+-		return ret;
+-	}
+-
+-	memset(&info, 0, sizeof(struct i2c_board_info));
+-	info.addr = setup->i2c_address;
+-	strlcpy(info.type, "uda1380", I2C_NAME_SIZE);
+-
+-	adapter = i2c_get_adapter(setup->i2c_bus);
+-	if (!adapter) {
+-		dev_err(&pdev->dev, "can't get i2c adapter %d\n",
+-			setup->i2c_bus);
+-		goto err_driver;
+-	}
+-
+-	client = i2c_new_device(adapter, &info);
+-	i2c_put_adapter(adapter);
+-	if (!client) {
+-		dev_err(&pdev->dev, "can't add i2c device at 0x%x\n",
+-			(unsigned int)info.addr);
+-		goto err_driver;
+-	}
+-
+-	return 0;
+-
+-err_driver:
+-	i2c_del_driver(&uda1380_i2c_driver);
+-	return -ENODEV;
+-}
+-#endif
+-
+ static int uda1380_probe(struct platform_device *pdev)
+ {
+ 	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
+@@ -800,13 +763,7 @@
+ 
+ 	uda1380_socdev = socdev;
+ 	ret = -ENODEV;
+-
+-#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
+-	if (setup->i2c_address) {
+-		codec->hw_write = (hw_write_t)i2c_master_send;
+-		ret = uda1380_add_i2c_device(pdev, setup);
+-	}
+-#endif
++	ret = uda1380_init(socdev, setup->dac_clk);
+ 
+ 	if (ret != 0)
+ 		kfree(codec);
+@@ -824,10 +781,6 @@
+ 
+ 	snd_soc_free_pcms(socdev);
+ 	snd_soc_dapm_free(socdev);
+-#if defined(CONFIG_I2C) || defined(CONFIG_I2C_MODULE)
+-	i2c_unregister_device(codec->control_data);
+-	i2c_del_driver(&uda1380_i2c_driver);
+-#endif
+ 	kfree(codec);
+ 
+ 	return 0;
+diff -urN linux-2.6.29/sound/soc/s3c24xx/Kconfig linux-2.6.29.n311/sound/soc/s3c24xx/Kconfig
+--- linux-2.6.29/sound/soc/s3c24xx/Kconfig	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/sound/soc/s3c24xx/Kconfig	2009-03-25 12:38:22.000000000 +0300
+@@ -49,3 +49,9 @@
+        	depends on SND_S3C24XX_SOC
+        	select SND_S3C24XX_SOC_I2S
+        	select SND_SOC_UDA134X
++
++config SND_RX1950_UDA1380
++	tristate "SoC I2S Audio support UDA134X wired to a S3C24XX"
++       	depends on SND_S3C24XX_SOC
++       	select SND_S3C24XX_SOC_I2S
++       	select SND_SOC_UDA1380
+diff -urN linux-2.6.29/sound/soc/s3c24xx/Makefile linux-2.6.29.n311/sound/soc/s3c24xx/Makefile
+--- linux-2.6.29/sound/soc/s3c24xx/Makefile	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/sound/soc/s3c24xx/Makefile	2009-03-25 12:40:05.000000000 +0300
+@@ -14,8 +14,10 @@
+ snd-soc-smdk2443-wm9710-objs := smdk2443_wm9710.o
+ snd-soc-ln2440sbc-alc650-objs := ln2440sbc_alc650.o
+ snd-soc-s3c24xx-uda134x-objs := s3c24xx_uda134x.o
++snd-soc-rx1950-uda1380-objs := rx1950_uda1380.o
+ 
+ obj-$(CONFIG_SND_S3C24XX_SOC_NEO1973_WM8753) += snd-soc-neo1973-wm8753.o
+ obj-$(CONFIG_SND_S3C24XX_SOC_SMDK2443_WM9710) += snd-soc-smdk2443-wm9710.o
+ obj-$(CONFIG_SND_S3C24XX_SOC_LN2440SBC_ALC650) += snd-soc-ln2440sbc-alc650.o
+ obj-$(CONFIG_SND_S3C24XX_SOC_S3C24XX_UDA134X) += snd-soc-s3c24xx-uda134x.o
++obj-$(CONFIG_SND_RX1950_UDA1380) += snd-soc-rx1950-uda1380.o
+diff -urN linux-2.6.29/sound/soc/s3c24xx/rx1950_uda1380.c linux-2.6.29.n311/sound/soc/s3c24xx/rx1950_uda1380.c
+--- linux-2.6.29/sound/soc/s3c24xx/rx1950_uda1380.c	1970-01-01 03:00:00.000000000 +0300
++++ linux-2.6.29.n311/sound/soc/s3c24xx/rx1950_uda1380.c	2009-03-25 17:06:38.000000000 +0300
+@@ -0,0 +1,448 @@
++/*
++ * rx1950.c  --  ALSA Soc Audio Layer
++ *
++ * Copyright (c) 2007 Roman Moravcik <roman.moravcik@gmail.com>
++ *
++ * Based on smdk2440.c and magician.c
++ *
++ * Authors: Graeme Gregory graeme.gregory@wolfsonmicro.com
++ *          Philipp Zabel <philipp.zabel@gmail.com>
++ *          Denis Grigoriev <dgreenday@gmail.com>
++ *
++ *  This program is free software; you can redistribute  it and/or modify it
++ *  under  the terms of  the GNU General  Public License as published by the
++ *  Free Software Foundation;  either version 2 of the  License, or (at your
++ *  option) any later version.
++ *
++ */
++
++#include <linux/module.h>
++#include <linux/moduleparam.h>
++#include <linux/timer.h>
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++#include <linux/platform_device.h>
++#include <sound/core.h>
++#include <sound/pcm.h>
++#include <sound/soc.h>
++#include <sound/soc-dapm.h>
++
++#include <asm/mach-types.h>
++#include <asm/hardware/scoop.h>
++#include <asm/plat-s3c24xx/regs-iis.h>
++#include <mach/regs-clock.h>
++#include <mach/regs-gpio.h>
++#include <mach/regs-gpioj.h>
++#include <mach/audio.h>
++
++#include <asm/io.h>
++#include <mach/hardware.h>
++#include "../codecs/uda1380.h"
++#include "s3c24xx-pcm.h"
++#include "s3c24xx-i2s.h"
++
++extern struct platform_device s3c_device_asic3;
++
++#define RX1950_DEBUG
++#ifdef RX1950_DEBUG
++#define DBG(x...) printk(KERN_CRIT x)
++#else
++#define DBG(x...)
++#endif
++
++#define RX1950_HP_OFF    0
++#define RX1950_HP_ON     1
++#define RX1950_MIC       2
++
++#define RX1950_SPK_ON    0
++#define RX1950_SPK_OFF   1
++
++static int rx1950_jack_func = RX1950_HP_OFF;
++static int rx1950_spk_func = RX1950_SPK_ON;
++
++static void rx1950_ext_control(struct snd_soc_codec *codec)
++{
++	if (rx1950_spk_func == RX1950_SPK_ON)
++		snd_soc_dapm_enable_pin(codec, "Speaker");
++	else
++		snd_soc_dapm_disable_pin(codec, "Speaker");
++	    
++	/* set up jack connection */
++	switch (rx1950_jack_func) {
++		case RX1950_HP_OFF:
++	    		snd_soc_dapm_disable_pin(codec, "Headphone Jack");
++			snd_soc_dapm_disable_pin(codec, "Mic Jack");
++			break;
++		case RX1950_HP_ON:
++			snd_soc_dapm_enable_pin(codec, "Headphone Jack");
++			snd_soc_dapm_disable_pin(codec, "Mic Jack");
++			break;
++		case RX1950_MIC:
++			snd_soc_dapm_disable_pin(codec, "Headphone Jack");
++			snd_soc_dapm_enable_pin(codec, "Mic Jack");
++			break;
++	}
++	snd_soc_dapm_sync(codec);
++}
++
++static int rx1950_startup(struct snd_pcm_substream *substream)
++{
++	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++	struct snd_soc_codec *codec = rtd->socdev->codec;
++
++	DBG("Entered rx1950_startup\n");
++
++	/* check the jack status at stream startup */
++	rx1950_ext_control(codec);
++
++	return 0;
++}
++
++static void rx1950_shutdown(struct snd_pcm_substream *substream)
++{
++//	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++//	struct snd_soc_codec *codec = rtd->socdev->codec;
++
++	DBG("Entered rx1950_shutdown\n");
++}
++
++static int rx1950_hw_params(struct snd_pcm_substream *substream,
++				struct snd_pcm_hw_params *params)
++{
++	struct snd_soc_pcm_runtime *rtd = substream->private_data;
++	struct snd_soc_dai *cpu_dai = rtd->dai->cpu_dai;
++	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
++	unsigned long iis_clkrate;
++	int div, div256, div384, diff256, diff384, bclk;
++	int ret;
++	unsigned int rate=params_rate(params);
++
++	DBG("Entered %s\n",__FUNCTION__);
++
++	iis_clkrate = s3c24xx_i2s_get_clockrate();
++	DBG("iis_clkrate = %li\n", iis_clkrate);
++
++	/* Using PCLK doesnt seem to suit audio particularly well on these cpu's
++	 */
++
++	div256 = iis_clkrate / (rate * 256);
++	div384 = iis_clkrate / (rate * 384);
++
++	if (((iis_clkrate / div256) - (rate * 256)) <
++		((rate * 256) - (iis_clkrate / (div256 + 1)))) {
++		diff256 = (iis_clkrate / div256) - (rate * 256);
++	} else {
++		div256++;
++		diff256 = (iis_clkrate / div256) - (rate * 256);
++	}
++
++	if (((iis_clkrate / div384) - (rate * 384)) <
++		((rate * 384) - (iis_clkrate / (div384 + 1)))) {
++		diff384 = (iis_clkrate / div384) - (rate * 384);
++	} else {
++		div384++;
++		diff384 = (iis_clkrate / div384) - (rate * 384);
++	}
++
++	DBG("diff256 %d, diff384 %d\n", diff256, diff384);
++
++	if (diff256<=diff384) {
++		DBG("Selected 256FS\n");
++		div = div256;
++		bclk = S3C2410_IISMOD_256FS;
++	} else {
++		DBG("Selected 384FS\n");
++		div = div384;
++		bclk = S3C2410_IISMOD_384FS;
++	}
++
++	/* set codec DAI configuration */
++	ret = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
++		SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS);
++	if (ret < 0)
++		return ret;
++
++	/* set cpu DAI configuration */
++	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S |
++		SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_CBS_CFS);
++	if (ret < 0)
++		return ret;
++
++	/* set the audio system clock for DAC and ADC */
++	ret = snd_soc_dai_set_sysclk(cpu_dai, S3C24XX_CLKSRC_PCLK,
++		rate, SND_SOC_CLOCK_OUT);
++	if (ret < 0)
++		return ret;
++
++	/* set MCLK division for sample rate */
++	ret = snd_soc_dai_set_clkdiv(cpu_dai, S3C24XX_DIV_MCLK, S3C2410_IISMOD_32FS );
++	if (ret < 0)
++		return ret;
++
++	/* set BCLK division for sample rate */
++	ret = snd_soc_dai_set_clkdiv(cpu_dai, S3C24XX_DIV_BCLK, bclk);
++	if (ret < 0)
++		return ret;
++
++	/* set prescaler division for sample rate */
++	ret = snd_soc_dai_set_clkdiv(cpu_dai, S3C24XX_DIV_PRESCALER,
++		S3C24XX_PRESCALE(div,div));
++	if (ret < 0)
++		return ret;
++
++	return 0;
++}
++
++static struct snd_soc_ops rx1950_ops = {
++	.startup 	= rx1950_startup,
++	.shutdown 	= rx1950_shutdown,
++	.hw_params 	= rx1950_hw_params,
++};
++
++static int rx1950_get_jack(struct snd_kcontrol *kcontrol,
++			   struct snd_ctl_elem_value *ucontrol)
++{
++	ucontrol->value.integer.value[0] = rx1950_jack_func;
++	return 0;
++}
++
++static int rx1950_set_jack(struct snd_kcontrol *kcontrol,
++			   struct snd_ctl_elem_value *ucontrol)
++{
++	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
++
++	if (rx1950_jack_func == ucontrol->value.integer.value[0])
++		return 0;
++
++	rx1950_jack_func = ucontrol->value.integer.value[0];
++	rx1950_ext_control(codec);
++	return 1;
++}
++
++static int rx1950_get_spk(struct snd_kcontrol *kcontrol,
++			  struct snd_ctl_elem_value *ucontrol)
++{
++	ucontrol->value.integer.value[0] = rx1950_spk_func;
++	return 0;
++}
++
++static int rx1950_set_spk(struct snd_kcontrol *kcontrol,
++			  struct snd_ctl_elem_value *ucontrol)
++{
++	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
++
++	if (rx1950_spk_func == ucontrol->value.integer.value[0])
++		return 0;
++
++	rx1950_spk_func = ucontrol->value.integer.value[0];
++	if (rx1950_spk_func) {
++		s3c2410_gpio_setpin(S3C2410_GPA1, 0);
++	} else {
++		s3c2410_gpio_setpin(S3C2410_GPA1, 1);
++	}
++	rx1950_ext_control(codec);
++	return 1;
++}
++
++static int rx1950_spk_power(struct snd_soc_dapm_widget *w,
++	       	struct snd_kcontrol *kcontrol, int event)
++{
++	s3c2410_gpio_cfgpin(S3C2410_GPA1, S3C2410_GPIO_OUTPUT);
++	if (SND_SOC_DAPM_EVENT_ON(event) && (rx1950_spk_func == 0))
++		s3c2410_gpio_setpin(S3C2410_GPA1, 1);
++	else
++		s3c2410_gpio_setpin(S3C2410_GPA1, 0);
++
++	return 0;
++}
++
++/* rx1950 machine dapm widgets */
++static const struct snd_soc_dapm_widget uda1380_dapm_widgets[] = {
++	SND_SOC_DAPM_HP("Headphone Jack", NULL),
++	SND_SOC_DAPM_MIC("Mic Jack", NULL),
++	SND_SOC_DAPM_SPK("Speaker", rx1950_spk_power),
++};
++
++/* rx1950 machine audio_map */
++static const struct snd_soc_dapm_route audio_map[] = {
++	/* headphone connected to VOUTLHP, VOUTRHP */
++	{"Headphone Jack", NULL, "VOUTLHP"},
++	{"Headphone Jack", NULL, "VOUTRHP"},
++
++	/* ext speaker connected to VOUTL, VOUTR  */
++	{"Speaker", NULL, "VOUTL"},
++	{"Speaker", NULL, "VOUTR"},
++
++	/* mic is connected to VINM */
++	{"VINM", NULL, "Mic Jack"},
++};
++
++static const char *jack_function[] = {"Off", "Headphone", "Mic"};
++static const char *spk_function[] = {"On", "Off"};
++
++static const struct soc_enum rx1950_enum[] = {
++	SOC_ENUM_SINGLE_EXT(3, jack_function),
++	SOC_ENUM_SINGLE_EXT(2, spk_function),
++};
++
++static const struct snd_kcontrol_new uda1380_rx1950_controls[] = {
++	SOC_ENUM_EXT("Jack Function", rx1950_enum[0], rx1950_get_jack,
++			rx1950_set_jack),
++	SOC_ENUM_EXT("Speaker Function", rx1950_enum[1], rx1950_get_spk,
++			rx1950_set_spk),
++};
++
++/*
++ * Logic for a UDA1380 as attached to RX1950
++ */
++static int rx1950_uda1380_init(struct snd_soc_codec *codec)
++{
++	int i, err;
++
++	DBG("Staring rx1950 init\n");
++
++	/* NC codec pins */
++	snd_soc_dapm_disable_pin(codec, "VOUTLHP");
++	snd_soc_dapm_disable_pin(codec, "VOUTRHP");
++
++	/* Add rx1950 specific controls */
++	for (i = 0; i < ARRAY_SIZE(uda1380_rx1950_controls); i++) {
++		if ((err = snd_ctl_add(codec->card,
++				snd_soc_cnew(&uda1380_rx1950_controls[i],
++				codec, NULL))) < 0)
++			return err;
++	}
++
++	/* Add rx1950 specific widgets */
++	for(i = 0; i < ARRAY_SIZE(uda1380_dapm_widgets); i++) {
++		snd_soc_dapm_new_control(codec, &uda1380_dapm_widgets[i]);
++	}
++
++	/* Set up rx1950 specific audio path audio_mapnects */
++	err = snd_soc_dapm_add_routes(codec, audio_map,
++				      ARRAY_SIZE(audio_map));
++	snd_soc_dapm_sync(codec);
++
++	DBG("Ending rx1950 init\n");
++
++	return 0;
++}
++
++/* s3c24xx digital audio interface glue - connects codec <--> CPU */
++static struct snd_soc_dai_link s3c24xx_dai = {
++	.name 		= "uda1380",
++	.stream_name 	= "UDA1380",
++	.cpu_dai 	= &s3c24xx_i2s_dai,
++	.codec_dai 	= &uda1380_dai[UDA1380_DAI_DUPLEX],
++	.init 		= rx1950_uda1380_init,
++	.ops 		= &rx1950_ops,
++};
++
++/* rx1950 audio machine driver */
++static struct snd_soc_card snd_soc_machine_rx1950 = {
++	.name 		= "RX1950",
++	.platform       = &s3c24xx_soc_platform,
++	.dai_link 	= &s3c24xx_dai,
++	.num_links 	= 1,
++};
++static struct uda1380_setup_data rx1950_uda1380_setup = {
++	.i2c_address 	= 0x1a,
++	.dac_clk 	= UDA1380_DAC_CLK_SYSCLK,
++};
++/* s3c24xx audio subsystem */
++static struct snd_soc_device s3c24xx_snd_devdata = {
++	.card 	        = &snd_soc_machine_rx1950,
++	.codec_dev 	= &soc_codec_dev_uda1380,
++	.codec_data 	= &rx1950_uda1380_setup,
++};
++
++static struct platform_device *s3c24xx_snd_device;
++
++static int __init rx1950_init(void)
++{
++	int ret;
++
++	/* enable codec's power */
++
++	DBG("Pin ON\n");
++	s3c2410_gpio_cfgpin(S3C2410_GPD1, S3C2410_GPD1_OUTP);
++	s3c2410_gpio_setpin(S3C2410_GPD1, 0);
++	
++//	s3c2410_gpio_cfgpin(S3C2410_GPE15, S3C2410_GPE15_OUTP);
++//	s3c2410_gpio_setpin(S3C2410_GPE15, 1);
++
++//	s3c2410_gpio_cfgpin(S3C2410_GPE0, S3C2410_GPE0_I2SLRCK);
++//	s3c2410_gpio_setpin(S3C2410_GPE3, 1);
++	
++//	s3c2410_gpio_cfgpin(S3C2410_GPE3, S3C2410_GPE3_I2SSDI);
++//	s3c2410_gpio_setpin(S3C2410_GPE3, 1);
++
++	//s3c2410_gpio_cfgpin(S3C2410_GPE3, S3C2410_GPIO_OUTPUT);
++	//s3c2410_gpio_setpin(S3C2410_GPE3, 1);
++	
++//	s3c2410_gpio_cfgpin(S3C2410_GPC13, S3C2410_GPIO_OUTPUT);
++//	s3c2410_gpio_setpin(S3C2410_GPC13, 1);
++	
++	s3c2410_gpio_cfgpin(S3C2410_GPA11, S3C2410_GPIO_OUTPUT);
++	s3c2410_gpio_setpin(S3C2410_GPA11, 1);
++
++//	s3c2410_gpio_cfgpin(S3C2410_GPD0, S3C2410_GPIO_OUTPUT);
++//	s3c2410_gpio_setpin(S3C2410_GPD0, 0);
++
++//	s3c2410_gpio_cfgpin(S3C2410_GPG12, S3C2410_GPIO_OUTPUT);
++//	s3c2410_gpio_setpin(S3C2410_GPG12, 1);
++
++//	s3c2410_gpio_cfgpin(S3C2440_GPJ0, S3C2410_GPIO_OUTPUT);
++//	s3c2410_gpio_setpin(S3C2440_GPJ0, 0);
++//	msleep(50);
++//	s3c2410_gpio_setpin(S3C2440_GPJ0, 1);
++//	msleep(50);
++		       
++	s3c24xx_snd_device = platform_device_alloc("soc-audio", -1);
++	if (!s3c24xx_snd_device) {
++		DBG("platform_dev_alloc failed\n");
++		free_irq(IRQ_EINT19, NULL);
++		return -ENOMEM;
++	}
++
++	platform_set_drvdata(s3c24xx_snd_device, &s3c24xx_snd_devdata);
++	s3c24xx_snd_devdata.dev = &s3c24xx_snd_device->dev;
++	ret = platform_device_add(s3c24xx_snd_device);
++
++	if (ret) {
++		DBG("ret = %i\n",ret);
++		platform_device_put(s3c24xx_snd_device);
++	}
++
++	return ret;
++}
++
++static void __exit rx1950_exit(void)
++{
++	DBG("Pin OFF\n");
++
++//	s3c2410_gpio_cfgpin(S3C2410_GPD1, S3C2410_GPD1_OUTP);
++//	s3c2410_gpio_setpin(S3C2410_GPD1, 0);
++//	s3c2410_gpio_cfgpin(S3C2410_GPE3, S3C2410_GPE3_I2SSDI);
++//	s3c2410_gpio_setpin(S3C2410_GPE3, 0);
++	//s3c2410_gpio_cfgpin(S3C2410_GPD1, S3C2410_GPIO_OUTPUT);
++	//s3c2410_gpio_setpin(S3C2410_GPD1, 0);
++	
++	//s3c2410_gpio_cfgpin(S3C2410_GPE3, S3C2410_GPIO_OUTPUT);
++	//s3c2410_gpio_setpin(S3C2410_GPE3, 0);
++	
++	//s3c2410_gpio_cfgpin(S3C2410_GPC13, S3C2410_GPIO_OUTPUT);
++	//s3c2410_gpio_setpin(S3C2410_GPC13, 0);
++	
++	//s3c2410_gpio_cfgpin(S3C2410_GPA11, S3C2410_GPIO_OUTPUT);
++	//s3c2410_gpio_setpin(S3C2410_GPA11, 0);
++	platform_device_unregister(s3c24xx_snd_device);
++}
++
++module_init(rx1950_init);
++module_exit(rx1950_exit);
++
++/* Module information */
++MODULE_AUTHOR("Roman Moravcik, <roman.moravcik@gmail.com>");
++MODULE_DESCRIPTION("ALSA SoC RX1950");
++MODULE_LICENSE("GPL");
+diff -urN linux-2.6.29/sound/soc/s3c24xx/s3c24xx-i2s.c linux-2.6.29.n311/sound/soc/s3c24xx/s3c24xx-i2s.c
+--- linux-2.6.29/sound/soc/s3c24xx/s3c24xx-i2s.c	2009-03-24 02:12:14.000000000 +0300
++++ linux-2.6.29.n311/sound/soc/s3c24xx/s3c24xx-i2s.c	2009-03-25 14:20:25.000000000 +0300
+@@ -39,7 +39,7 @@
+ #include "s3c24xx-pcm.h"
+ #include "s3c24xx-i2s.h"
+ 
+-#define S3C24XX_I2S_DEBUG 0
++#define S3C24XX_I2S_DEBUG 1
+ #if S3C24XX_I2S_DEBUG
+ #define DBG(x...) printk(KERN_DEBUG "s3c24xx-i2s: " x)
+ #else
+@@ -96,7 +96,7 @@
+ 		iisfcon |= S3C2410_IISFCON_TXDMA | S3C2410_IISFCON_TXENABLE;
+ 		iiscon  |= S3C2410_IISCON_TXDMAEN | S3C2410_IISCON_IISEN;
+ 		iiscon  &= ~S3C2410_IISCON_TXIDLE;
+-		iismod  |= S3C2410_IISMOD_TXMODE;
++		iismod  |= S3C2410_IISMOD_TXMODE | 1;
+ 
+ 		writel(iismod,  s3c24xx_i2s.regs + S3C2410_IISMOD);
+ 		writel(iisfcon, s3c24xx_i2s.regs + S3C2410_IISFCON);
