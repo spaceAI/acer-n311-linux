@@ -11,7 +11,7 @@ We need to place root filesystem on SD/MMC card in two cases:
 Format your SD card and *make 2 partitions*:
 
   #1 *FAT partition* for storing HaRET, initrd and kernel.
-  #2 *Ext3 partition* for root filesystem.
+  #2 *Ext2 partition* for root filesystem.
 
 Then *transfer the required files* to the rootfs partition:
 
