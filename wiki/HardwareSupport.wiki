@@ -10,6 +10,6 @@
 || Battery || Not supported ||
 || Nand Flash|| Not supported ||
 || Serial Port || Not tested ||
-|| Bluetooth || Not supported||
-|| Wi-Fi || Not supported ||
-|| Sound || Not yet ||
+|| Bluetooth || Work in progress||
+|| Wi-Fi || Work in progress ||
+|| Sound || Work in progress ||
