@@ -44,7 +44,7 @@
 #include "s3c24xx-pcm.h"
 #include "s3c24xx-i2s.h"
 
-#define RX1950_DEBUG
+#undef RX1950_DEBUG
 #ifdef RX1950_DEBUG
 #define DBG(x...) printk(KERN_INFO x)
 #else
@@ -95,7 +95,7 @@ static void n311_ext_control(struct snd_soc_codec *codec)
 
 	//printk("%s entered\n", __func__);
 
-	if (jack_inserted == old_jack_inserted) return;
+	//if (jack_inserted == old_jack_inserted) return;
 
 	if (!sound_started) {
 		snd_soc_dapm_disable_pin(codec, "Speaker");
@@ -165,7 +165,7 @@ static int n311_hw_params(struct snd_pcm_substream *substream,
 	int ret;
 	unsigned int rate=params_rate(params);
 
-	DBG("Entered %s\n",__FUNCTION__);
+	//DBG("Entered %s\n",__FUNCTION__);
 
 	iis_clkrate = s3c24xx_i2s_get_clockrate();
 	DBG("iis_clkrate = %li\n", iis_clkrate);
@@ -352,13 +352,13 @@ static irqreturn_t codec_enabled(int irq, void *dev_id)
 	else {
 		jack_inserted = 0;
 	}
-	if (old_jack_inserted != jack_inserted) {
+	//if (old_jack_inserted != jack_inserted) {
 		old_jack_inserted = jack_inserted;
 		INIT_WORK(&jack_work, n311_jack_work);
 
 		/* Does not care about result */
 		schedule_work(&jack_work);
-	}
+	//}
 
 exit:
 	return IRQ_HANDLED;
@@ -374,22 +374,14 @@ static void n311_codec_enable(int enable)
 
 		local_irq_save(flags);
                 DBG("Pin ON\n");
-                s3c2410_gpio_cfgpin(S3C2410_GPD1, S3C2410_GPD1_OUTP);
+
                 s3c2410_gpio_setpin(S3C2410_GPD1, 1);
 
-                s3c2410_gpio_cfgpin(S3C2410_GPE3, S3C2410_GPIO_OUTPUT);
-                s3c2410_gpio_setpin(S3C2410_GPE3, 1);
-
-                s3c2410_gpio_cfgpin(S3C2410_GPC13, S3C2410_GPIO_OUTPUT);
-                s3c2410_gpio_setpin(S3C2410_GPC13, 1);
-
-                s3c2410_gpio_cfgpin(S3C2410_GPA11, S3C2410_GPIO_OUTPUT);
                 s3c2410_gpio_setpin(S3C2410_GPA11, 1);
 
 		local_irq_restore(flags);
 	}
 	else {
-                goto done;
 		if (!s3c2410_gpio_getpin(S3C2410_GPA11))
 			goto done;
 
@@ -402,8 +394,8 @@ static void n311_codec_enable(int enable)
 		s3c2410_gpio_setpin(S3C2410_GPD1, 0);
 		mdelay(10);
 
-		s3c2410_gpio_setpin(S3C2410_GPA1, 0);
-		mdelay(10);
+		//s3c2410_gpio_setpin(S3C2410_GPA1, 0);
+		//mdelay(10);
 
 		s3c2410_gpio_setpin(S3C2410_GPA11, 1);
 		s3c2410_gpio_setpin(S3C2410_GPA11, 0);
@@ -419,9 +411,9 @@ static int __init n311_init(void)
 	int ret;
 
 	/* configure some gpios */
-	//s3c2410_gpio_cfgpin(S3C2410_GPD1, S3C2410_GPD1_OUTP);
+	s3c2410_gpio_cfgpin(S3C2410_GPD1, S3C2410_GPD1_OUTP);
 	s3c2410_gpio_cfgpin(S3C2410_GPG8, S3C2410_GPG8_EINT16);
-	//s3c2410_gpio_cfgpin(S3C2410_GPA11, S3C2410_GPA11_OUT);
+	s3c2410_gpio_cfgpin(S3C2410_GPA11, S3C2410_GPA11_OUT);
 
 	s3c24xx_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!s3c24xx_snd_device) {
