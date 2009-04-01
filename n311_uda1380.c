@@ -37,22 +37,29 @@
 #include <mach/regs-gpio.h>
 #include <mach/regs-gpioj.h>
 #include <mach/audio.h>
-
+#include <linux/gpio.h>
 #include <asm/io.h>
 #include <mach/hardware.h>
 #include "../codecs/uda1380.h"
 #include "s3c24xx-pcm.h"
 #include "s3c24xx-i2s.h"
 
-#undef RX1950_DEBUG
+#define RX1950_DEBUG
 #ifdef RX1950_DEBUG
 #define DBG(x...) printk(KERN_INFO x)
 #else
 #define DBG(x...)
 #endif
 
+enum { HP_OFF, HP_ON, HP_DUNNO };
+
 static int sound_started;
-static int jack_inserted;
+static int jack;
+
+static DECLARE_MUTEX(n311_power_mutex);
+static DECLARE_MUTEX(n311_dapm_mutex);
+static struct work_struct jack_work;
+
 
 /* Can't do better on n311 :( */
 static unsigned int rates[] = {
@@ -82,43 +89,44 @@ static int n311_spk_power(struct snd_soc_dapm_widget *w,
 	       	struct snd_kcontrol *kcontrol, int event)
 {
 	if (SND_SOC_DAPM_EVENT_ON(event))
-		s3c2410_gpio_setpin(S3C2410_GPA1, 1);
+		gpio_set_value(S3C2410_GPD1, 1);
 	else
-		s3c2410_gpio_setpin(S3C2410_GPA1, 0);
+		gpio_set_value(S3C2410_GPD1, 0);
 
 	return 0;
 }
 
 static void n311_ext_control(struct snd_soc_codec *codec)
 {
-	static int old_jack_inserted = -1;
+	printk("%s entered: jack = %d sound_started = %d\n", __func__, jack, sound_started);
 
-	//printk("%s entered\n", __func__);
-
-	//if (jack_inserted == old_jack_inserted) return;
-
+	down(&n311_dapm_mutex);
 	if (!sound_started) {
 		snd_soc_dapm_disable_pin(codec, "Speaker");
 		snd_soc_dapm_disable_pin(codec, "Headphone Jack");
 		snd_soc_dapm_disable_pin(codec, "Mic Jack");
-		old_jack_inserted = -1;
 		snd_soc_dapm_sync(codec);
 	}
 	else {
-		old_jack_inserted = jack_inserted;
-		if (jack_inserted) {
+            switch (jack) {
+                case HP_ON: 
+                        printk("disabling speaker\n");
 			snd_soc_dapm_disable_pin(codec, "Speaker");
 			snd_soc_dapm_enable_pin(codec, "Headphone Jack");
 			snd_soc_dapm_disable_pin(codec, "Mic Jack");
-		}
-		else {
+                        break;
+                case HP_OFF:
+                        printk("enabling speaker\n");
 			snd_soc_dapm_enable_pin(codec, "Speaker");
 			snd_soc_dapm_disable_pin(codec, "Headphone Jack");
 			snd_soc_dapm_disable_pin(codec, "Mic Jack");
+                        break;
+                case HP_DUNNO:
+                        printk("lol i dunno\n");
 		}
-		snd_soc_dapm_sync(codec);
-	}
-	    
+            snd_soc_dapm_sync(codec);
+        }
+	up(&n311_dapm_mutex);
 }
 
 static int n311_startup(struct snd_pcm_substream *substream)
@@ -126,15 +134,10 @@ static int n311_startup(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_codec *codec = rtd->socdev->codec;
 
-	//printk("%s entered\n", __func__);
+	printk("%s entered\n", __func__);
 
 	n311_set_rate_constr(substream);
-	if (s3c2410_gpio_getpin(S3C2410_GPG8)) {
-		jack_inserted = 1;
-	}
-	else {
-		jack_inserted = 0;
-	}
+	jack = !(!gpio_get_value(S3C2410_GPG8));
 	sound_started = 1;
 	n311_ext_control(codec);
 
@@ -147,9 +150,9 @@ static void n311_shutdown(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_codec *codec = rtd->socdev->codec;
 
-	//printk("%s entered\n", __func__);
+	printk("%s entered\n", __func__);
 
-	jack_inserted = 0;
+	jack = 0;
 	sound_started = 0;
 	n311_ext_control(codec);
 }
@@ -288,7 +291,7 @@ static int n311_uda1380_init(struct snd_soc_codec *codec)
 	/* Set up n311 specific audio path audio_mapnects */
 	err = snd_soc_dapm_add_routes(codec, audio_map,
 				      ARRAY_SIZE(audio_map));
-
+        jack = HP_DUNNO;
 	n311_ext_control(codec);
 
 	DBG("Ending n311 init\n");
@@ -330,11 +333,9 @@ static struct snd_soc_device s3c24xx_snd_devdata = {
 
 static struct platform_device *s3c24xx_snd_device;
 
-static DECLARE_MUTEX(n311_power_mutex);
-static struct work_struct jack_work;
-
 static void n311_jack_work(struct work_struct *work)
 {
+        printk("Entered %s\n", __func__);
 	n311_ext_control(s3c24xx_snd_devdata.codec);	
 }
 
@@ -343,24 +344,13 @@ static irqreturn_t codec_enabled(int irq, void *dev_id)
 	/* Check if jack is inserted, and report
 	 * GPG8 == 1 if jack if inserted, otherwise GPG8 == 0
 	 */
-	static int old_jack_inserted = -1;
+	jack = !(!gpio_get_value(S3C2410_GPG8));
+	n311_ext_control(s3c24xx_snd_devdata.codec);	
+        //INIT_WORK(&jack_work, n311_jack_work);
 
-	if (!sound_started) goto exit;
-	if (s3c2410_gpio_getpin(S3C2410_GPG8)) {
-		jack_inserted = 1;
-	}
-	else {
-		jack_inserted = 0;
-	}
-	//if (old_jack_inserted != jack_inserted) {
-		old_jack_inserted = jack_inserted;
-		INIT_WORK(&jack_work, n311_jack_work);
+        /* Does not care about result */
+        //schedule_work(&jack_work);
 
-		/* Does not care about result */
-		schedule_work(&jack_work);
-	//}
-
-exit:
 	return IRQ_HANDLED;
 }
 
@@ -369,36 +359,36 @@ static void n311_codec_enable(int enable)
 	unsigned long flags;
 	down(&n311_power_mutex);
 	if (enable) {
-		if (s3c2410_gpio_getpin(S3C2410_GPA11))
+		if (gpio_get_value(S3C2410_GPA11))
 			goto done;
 
 		local_irq_save(flags);
                 DBG("Pin ON\n");
 
-                s3c2410_gpio_setpin(S3C2410_GPD1, 1);
+                gpio_set_value(S3C2410_GPD1, 1);
 
-                s3c2410_gpio_setpin(S3C2410_GPA11, 1);
+                gpio_set_value(S3C2410_GPA11, 1);
 
 		local_irq_restore(flags);
 	}
 	else {
-		if (!s3c2410_gpio_getpin(S3C2410_GPA11))
+		if (!gpio_get_value(S3C2410_GPA11))
 			goto done;
 
 		local_irq_save(flags);
 
 		/* We'd like to issue codec reset before powerdown */
 		mdelay(10);
-		s3c2410_gpio_setpin(S3C2410_GPD1, 1);
+		gpio_set_value(S3C2410_GPD1, 1);
 		mdelay(10);
-		s3c2410_gpio_setpin(S3C2410_GPD1, 0);
+		gpio_set_value(S3C2410_GPD1, 0);
 		mdelay(10);
 
-		//s3c2410_gpio_setpin(S3C2410_GPA1, 0);
+		//gpio_set_value(S3C2410_GPA1, 0);
 		//mdelay(10);
 
-		s3c2410_gpio_setpin(S3C2410_GPA11, 1);
-		s3c2410_gpio_setpin(S3C2410_GPA11, 0);
+		gpio_set_value(S3C2410_GPA11, 1);
+		gpio_set_value(S3C2410_GPA11, 0);
 
 		local_irq_restore(flags);
 	}
