@@ -44,7 +44,7 @@
 #include "s3c24xx-pcm.h"
 #include "s3c24xx-i2s.h"
 
-#define RX1950_DEBUG
+#undef RX1950_DEBUG
 #ifdef RX1950_DEBUG
 #define DBG(x...) printk(KERN_INFO x)
 #else
@@ -98,31 +98,32 @@ static int n311_spk_power(struct snd_soc_dapm_widget *w,
 
 static void n311_ext_control(struct snd_soc_codec *codec)
 {
-	printk("%s entered: jack = %d sound_started = %d\n", __func__, jack, sound_started);
+	DBG("%s entered: jack = %d sound_started = %d\n", __func__, jack, sound_started);
 
 	down(&n311_dapm_mutex);
 	if (!sound_started) {
+                DBG("disabling everything");
 		snd_soc_dapm_disable_pin(codec, "Speaker");
 		snd_soc_dapm_disable_pin(codec, "Headphone Jack");
 		snd_soc_dapm_disable_pin(codec, "Mic Jack");
 		snd_soc_dapm_sync(codec);
 	}
-	else {
+        else {
             switch (jack) {
                 case HP_ON: 
-                        printk("disabling speaker\n");
+                        DBG("disabling speaker\n");
 			snd_soc_dapm_disable_pin(codec, "Speaker");
 			snd_soc_dapm_enable_pin(codec, "Headphone Jack");
 			snd_soc_dapm_disable_pin(codec, "Mic Jack");
                         break;
                 case HP_OFF:
-                        printk("enabling speaker\n");
+                        DBG("enabling speaker\n");
 			snd_soc_dapm_enable_pin(codec, "Speaker");
 			snd_soc_dapm_disable_pin(codec, "Headphone Jack");
 			snd_soc_dapm_disable_pin(codec, "Mic Jack");
                         break;
                 case HP_DUNNO:
-                        printk("lol i dunno\n");
+                        DBG("lol i dunno\n");
 		}
             snd_soc_dapm_sync(codec);
         }
@@ -134,7 +135,7 @@ static int n311_startup(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_codec *codec = rtd->socdev->codec;
 
-	printk("%s entered\n", __func__);
+	DBG("%s entered\n", __func__);
 
 	n311_set_rate_constr(substream);
 	jack = !(!gpio_get_value(S3C2410_GPG8));
@@ -150,7 +151,7 @@ static void n311_shutdown(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_codec *codec = rtd->socdev->codec;
 
-	printk("%s entered\n", __func__);
+	DBG("%s entered\n", __func__);
 
 	jack = 0;
 	sound_started = 0;
@@ -272,7 +273,7 @@ static const struct snd_soc_dapm_route audio_map[] = {
 };
 
 /*
- * Logic for a UDA1380 as attached to RX1950
+ * Logic for a UDA1380 as attached to N311
  */
 static int n311_uda1380_init(struct snd_soc_codec *codec)
 {
@@ -292,6 +293,7 @@ static int n311_uda1380_init(struct snd_soc_codec *codec)
 	err = snd_soc_dapm_add_routes(codec, audio_map,
 				      ARRAY_SIZE(audio_map));
         jack = HP_DUNNO;
+        sound_started = 0;
 	n311_ext_control(codec);
 
 	DBG("Ending n311 init\n");
@@ -335,7 +337,7 @@ static struct platform_device *s3c24xx_snd_device;
 
 static void n311_jack_work(struct work_struct *work)
 {
-        printk("Entered %s\n", __func__);
+        DBG("Entered %s\n", __func__);
 	n311_ext_control(s3c24xx_snd_devdata.codec);	
 }
 
@@ -345,12 +347,10 @@ static irqreturn_t codec_enabled(int irq, void *dev_id)
 	 * GPG8 == 1 if jack if inserted, otherwise GPG8 == 0
 	 */
 	jack = !(!gpio_get_value(S3C2410_GPG8));
-	n311_ext_control(s3c24xx_snd_devdata.codec);	
-        //INIT_WORK(&jack_work, n311_jack_work);
+	//n311_ext_control(s3c24xx_snd_devdata.codec);	
 
         /* Does not care about result */
-        //schedule_work(&jack_work);
-
+        schedule_work(&jack_work);
 	return IRQ_HANDLED;
 }
 
@@ -407,13 +407,13 @@ static int __init n311_init(void)
 
 	s3c24xx_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!s3c24xx_snd_device) {
-		printk(KERN_ERR "platform_dev_alloc failed\n");
+		DBG(KERN_ERR "platform_dev_alloc failed\n");
 		return -ENOMEM;
 	}
 	if (request_irq(IRQ_EINT16, codec_enabled,
 			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 			"snd_soc_n311_uda1380", s3c24xx_snd_device)) {
-		printk(KERN_ERR "n311_uda1380: can't get irq.\n");
+		DBG(KERN_ERR "n311_uda1380: can't get irq.\n");
 		/* FIXME: fix memory leak here! */
 		return -ENOENT;
 	}
@@ -429,7 +429,8 @@ static int __init n311_init(void)
 		platform_device_put(s3c24xx_snd_device);
 	}
 
-	printk("%s done\n", __func__);
+        INIT_WORK(&jack_work, n311_jack_work);
+	DBG("%s done\n", __func__);
 
 	return ret;
 }
