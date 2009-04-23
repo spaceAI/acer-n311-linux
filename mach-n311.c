@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-s3c2440/mach-n311.c
  *
  * Copyright (c) 2008 blondquirk <blondquirk@gmail.com>
- * Copyright (c) 2008 polachok <polachok AT gmail DOT com>
+ * Copyright (c) 2009 polachok <polachok@gmail.com>
  * Heavily based on mach-g500.c and mach-rx1950.c
  *
  * This program is free software; you can redistribute it and/or modify
@@ -17,42 +17,60 @@
 #include <linux/init.h>
 #include <linux/serial_core.h>
 #include <linux/platform_device.h>
-#include <linux/sysdev.h>
+#include <linux/ata_platform.h>
+#include <linux/i2c.h>
+#include <linux/io.h>
+#include <linux/lcd.h>
+#include <linux/backlight.h>
+#include <linux/sm501.h>
+#include <linux/sm501-regs.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
-#include <asm/hardware.h>
-#include <asm/io.h>
+#include <asm/mach/irq.h>
+
+#include <mach/anubis-map.h>
+#include <mach/anubis-irq.h>
+#include <mach/anubis-cpld.h>
+
+#include <mach/hardware.h>
+#include <mach/fb.h>
+#include <mach/ts.h>
 #include <asm/irq.h>
 #include <asm/mach-types.h>
 
-#include <asm/arch/regs-lcd.h>
-#include <asm/arch/regs-irq.h>
-#include <asm/arch/regs-gpio.h>
-#include <asm/arch/fb.h>
-#include <asm/arch/lcd.h>
-#include <asm/arch/ts.h>
-#include <asm/arch/mci.h>
+#include <plat/regs-serial.h>
+#include <plat/regs-timer.h>
+#include <mach/regs-gpio.h>
+#include <mach/regs-mem.h>
+#include <mach/regs-lcd.h>
+#include <mach/regs-irq.h>
+#include <linux/mtd/mtd.h>
+#include <linux/mtd/nand.h>
+#include <linux/mtd/nand_ecc.h>
+#include <linux/mtd/partitions.h>
 
-#include <asm/plat-s3c/regs-serial.h>
-#include <asm/plat-s3c/regs-timer.h>
-#include <asm/plat-s3c/nand.h>
-#include <asm/plat-s3c24xx/clock.h>
-#include <asm/plat-s3c24xx/devs.h>
-#include <asm/plat-s3c24xx/cpu.h>
-#include <asm/plat-s3c24xx/irq.h>
-#include <asm/plat-s3c24xx/pm.h>
+#include <net/ax88796.h>
+
+#include <plat/clock.h>
+#include <plat/devs.h>
+#include <plat/cpu.h>
+#include <plat/irq.h>
+#include <plat/pm.h>
+#include <plat/mci.h>
+#include <plat/nand.h>
+#include <plat/iic.h>
 
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/host.h>
-
 #include <linux/gpio_keys.h>
 #include <linux/input.h>
 
 #include <linux/leds.h>
+#include "n311-buttons.c"
 
 static struct map_desc n311_iodesc[] __initdata = {
 	/* nothing */
@@ -126,7 +144,6 @@ static struct s3c2410_platform_nand n311_nand_info = {
 static struct s3c2410_ts_mach_info n311_ts_cfg = {
 	.delay = 40000,
 	.presc = 32,
-	.oversampling_shift = 3,
 };
 
 static void s3c2410_mmc_def_setpower(unsigned int to)
@@ -137,24 +154,24 @@ static void s3c2410_mmc_def_setpower(unsigned int to)
 
 static struct s3c24xx_mci_pdata n311_mmc_cfg = {
 	.gpio_detect  = S3C2410_GPF1,
-	.set_power  = s3c2410_mmc_def_setpower,
+	//.set_power  = s3c2410_mmc_def_setpower,
 	.ocr_avail  = MMC_VDD_32_33,
 };
 
 //Using the keys to restart the machine
 static struct gpio_keys_button n311_buttons[] = {
- {KEY_DELETE,   S3C2410_GPF0, 1, "Power button"},
+ {KEY_P,   S3C2410_GPF0, 1, "Power button"},
  {KEY_RESTART, S3C2410_GPF2, 0, "Reset button"},
  //{KEY_COFFEE, S3C2410_GPG1, 1, "Key lock"}, // it's a switch
- {KEY_LEFTALT, S3C2410_GPF4, 1, "Home button"},
- {KEY_LEFTCTRL, S3C2410_GPF5, 1, "Calendar button"},
+ {KEY_A, S3C2410_GPF4, 1, "Home button"},
+ {KEY_TAB, S3C2410_GPF5, 1, "Calendar button"},
  {KEY_C, S3C2410_GPF6, 1, "Contacts button"},
  {KEY_D, S3C2410_GPF7, 1, "Mail button"},
  {KEY_ENTER, S3C2410_GPG3, 1, "Ok button"},
- {KEY_LEFT, S3C2410_GPG4, 1, "Left button"},
+ {KEY_COMMA, S3C2410_GPG4, 1, "Left button"},
  {KEY_DOWN, S3C2410_GPG5, 1, "Down button"},
  {KEY_UP, S3C2410_GPG6, 1, "Up button"},
- {KEY_RIGHT, S3C2410_GPG7, 1, "Right button"},
+ {KEY_DOT, S3C2410_GPG7, 1, "Right button"},
  //{KEY_PAUSE, S3C2410_GPD1, 0, "Case open pin"}, // it's a switch
 };
 
@@ -193,6 +210,7 @@ static struct platform_device n311_gpio_leds = {
 	}
 };
 
+#ifdef BACKLIGHT
 static void n311_backlight_power(int on)
 {
 	s3c2410_gpio_setpin(S3C2410_GPB0, 0);
@@ -244,7 +262,6 @@ static void n311_set_brightness(int tcmpb0)
 	tcon &= ~S3C2410_TCON_T0MANUALUPD;
 	writel(tcon, S3C2410_TCON);
 }
-
 static struct s3c2410_bl_mach_info n311_bl_cfg = {
 
 	.backlight_max          = 0x2c,
@@ -253,19 +270,21 @@ static struct s3c2410_bl_mach_info n311_bl_cfg = {
 	.set_brightness		= n311_set_brightness,
 	.lcd_power		= n311_lcd_power
 };
+#endif
 
 static struct platform_device *n311_devices[] __initdata = {
 	&s3c_device_rtc,
 	&s3c_device_usb,
 	&s3c_device_lcd,
 	&s3c_device_wdt,
-	&s3c_device_i2c,
+	&s3c_device_i2c0,
 	&s3c_device_iis,
 	&s3c_device_nand,
 	&s3c_device_usbgadget,
 	&s3c_device_ts,
 	&s3c_device_sdi,
-	&s3c_device_bl,
+	&rx1950_lcdpower,
+//	&s3c_device_bl,
 };
 
 static void __init n311_map_io(void)
@@ -283,14 +302,15 @@ static void __init n311_init_machine(void)
 	s3c_device_sdi.dev.platform_data = &n311_mmc_cfg;
  	platform_device_register(&n311_button_device);
 	platform_device_register(&n311_gpio_leds);
-	set_s3c2410bl_info(&n311_bl_cfg);
+	s3c_i2c0_set_platdata(NULL);
+	//set_s3c2410bl_info(&n311_bl_cfg);
 	s3c2410_pm_init();
 	/* wake up source */
-  	s3c_irq_wake(IRQ_EINT1, 1);
+  	//s3c_irq_wake(IRQ_EINT1, 1);
 
         /* Configure the LEDs (even if we have no LED support)*/
- 	s3c2410_gpio_cfgpin(S3C2410_GPD10, S3C2410_GPD10_OUTP);
-	s3c2410_gpio_setpin(S3C2410_GPD10, 1);
+ 	//s3c2410_gpio_cfgpin(S3C2410_GPD10, S3C2410_GPD10_OUTP);
+	//s3c2410_gpio_setpin(S3C2410_GPD10, 1);
 }
 
 
